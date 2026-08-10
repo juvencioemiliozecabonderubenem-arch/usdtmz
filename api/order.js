@@ -1,5 +1,7 @@
-uexport default async function handler(req, res) {
-  // Apenas POST
+
+import sql from "./db.js";
+
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({
       success: false,
@@ -8,18 +10,12 @@ uexport default async function handler(req, res) {
   }
 
   try {
-    const {
-      name,
-      phone,
-      operation,
-      amount
-    } = req.body || {};
+    const { name, phone, operation, amount } = req.body || {};
 
-    // Validação
-    if (!name || !phone || !operation || !amount) {
+    if (!name || !phone || !operation || amount === undefined) {
       return res.status(400).json({
         success: false,
-        message: "Preencha todos os campos obrigatórios."
+        message: "Preencha todos os campos."
       });
     }
 
@@ -39,29 +35,43 @@ uexport default async function handler(req, res) {
       });
     }
 
-    // ID único do pedido
     const orderId =
       "USDTMZ-" +
       Date.now().toString(36).toUpperCase() +
       "-" +
       Math.random().toString(36).slice(2, 7).toUpperCase();
 
-    // Pedido criado.
-    // A gravação no banco será adicionada no próximo passo.
-    const order = {
-      orderId,
-      name: name.trim(),
-      phone: phone.trim(),
-      operation,
-      amount: numericAmount,
-      status: "PENDING",
-      createdAt: new Date().toISOString()
-    };
+    const result = await sql`
+      INSERT INTO orders (
+        order_id,
+        name,
+        phone,
+        operation,
+        amount,
+        status
+      )
+      VALUES (
+        ${orderId},
+        ${name.trim()},
+        ${phone.trim()},
+        ${operation},
+        ${numericAmount},
+        'PENDING'
+      )
+      RETURNING
+        order_id,
+        name,
+        phone,
+        operation,
+        amount,
+        status,
+        created_at
+    `;
 
     return res.status(201).json({
       success: true,
-      message: "Pedido criado com sucesso.",
-      order
+      message: "Pedido guardado com sucesso.",
+      order: result[0]
     });
 
   } catch (error) {
