@@ -393,77 +393,51 @@
   }
 
 
-  function createOrder() {
+  function createOrder() async function createOrder() {
 
-    const name =
-      document.getElementById("name").value.trim();
+  const name = document.getElementById("name").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  const payment = document.getElementById("payment").value;
+  const amount = parseFloat(document.getElementById("amount").value) || 0;
+  const success = document.getElementById("success");
 
-    const phone =
-      document.getElementById("phone").value.trim();
+  if (!name || !phone || !payment || amount <= 0) {
+    alert("Preencha todos os campos e informe um valor válido.");
+    return;
+  }
 
-    const payment =
-      document.getElementById("payment").value;
+  success.style.display = "block";
+  success.innerHTML = "A enviar o pedido...";
 
-    const amount =
-      parseFloat(document.getElementById("amount").value) || 0;
+  try {
+    const response = await fetch("/api/order", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: name,
+        phone: phone,
+        operation: mode,
+        amount: amount,
+        payment: payment
+      })
+    });
 
-    const success =
-      document.getElementById("success");
+    const data = await response.json();
 
-
-    if (!name || !phone || !payment || amount <= 0) {
-
-      alert(
-        "Preencha todos os campos e informe um valor válido."
-      );
-
-      return;
+    if (!response.ok) {
+      throw new Error(data.message || "Erro ao enviar pedido.");
     }
-
-
-    const orderNumber =
-      "USDTMZ-" +
-      Date.now().toString().slice(-6);
-
-
-    let value;
-
-    if (mode === "buy") {
-      value = (amount / RATE).toFixed(2) + " USDT";
-    } else {
-      value = (amount * RATE).toFixed(2) + " MZN";
-    }
-
-
-    success.style.display = "block";
 
     success.innerHTML =
-      "<strong>Pedido criado!</strong><br>" +
-      "Número: " + orderNumber + "<br>" +
-      "Cliente: " + escapeHtml(name) + "<br>" +
-      "Telefone: " + escapeHtml(phone) + "<br>" +
-      "Valor: " + value + "<br>" +
-      "Pagamento: " + payment.toUpperCase() +
-      "<br><br>" +
-      "Este é apenas um pedido de demonstração. " +
-      "Nenhum pagamento foi efetuado.";
+      "<strong>Pedido recebido!</strong><br>" +
+      "Número: " + escapeHtml(data.orderId) + "<br>" +
+      "Estado: Aguardando confirmação";
 
-    success.scrollIntoView({
-      behavior: "smooth"
-    });
+  } catch (error) {
+    success.innerHTML =
+      "<strong>Não foi possível enviar o pedido.</strong><br>" +
+      escapeHtml(error.message);
   }
-
-
-  function escapeHtml(text) {
-
-    const div = document.createElement("div");
-
-    div.textContent = text;
-
-    return div.innerHTML;
-  }
-
-</script>
-
-</body>
-</html>
+}
