@@ -1,1 +1,469 @@
 
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USDTMZ - Compra e Venda de USDT</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      background: #f4f7fb;
+      color: #172033;
+    }
+
+    header {
+      background: #0b5cff;
+      color: white;
+      padding: 18px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .status {
+      font-size: 13px;
+      background: #0a9f55;
+      padding: 7px 10px;
+      border-radius: 20px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #0b5cff, #063baf);
+      color: white;
+      padding: 45px 20px;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+
+    .hero p {
+      font-size: 16px;
+      opacity: .9;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: -25px auto 40px;
+      padding: 0 15px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 25px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.08);
+      margin-bottom: 20px;
+    }
+
+    .card h2 {
+      margin-bottom: 20px;
+      font-size: 21px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .tabs button {
+      flex: 1;
+      padding: 13px;
+      border: none;
+      border-radius: 10px;
+      background: #e9eef8;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .tabs button.active {
+      background: #0b5cff;
+      color: white;
+    }
+
+    label {
+      display: block;
+      margin: 14px 0 7px;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 14px;
+      border: 1px solid #d5dbea;
+      border-radius: 10px;
+      font-size: 16px;
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: #0b5cff;
+    }
+
+    .result {
+      background: #eef5ff;
+      border-radius: 12px;
+      padding: 18px;
+      margin-top: 18px;
+      text-align: center;
+    }
+
+    .result strong {
+      display: block;
+      font-size: 27px;
+      color: #0b5cff;
+      margin-top: 5px;
+    }
+
+    .main-btn {
+      width: 100%;
+      border: none;
+      padding: 16px;
+      margin-top: 20px;
+      background: #0b5cff;
+      color: white;
+      border-radius: 10px;
+      font-size: 17px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .main-btn:hover {
+      opacity: .9;
+    }
+
+    .info {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .info div {
+      background: #f7f9fd;
+      padding: 18px 10px;
+      text-align: center;
+      border-radius: 12px;
+    }
+
+    .info b {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .success {
+      display: none;
+      background: #e8fff2;
+      border: 1px solid #8be0b0;
+      color: #08753c;
+      padding: 18px;
+      border-radius: 12px;
+      margin-top: 20px;
+      line-height: 1.6;
+    }
+
+    footer {
+      text-align: center;
+      padding: 25px;
+      color: #687386;
+      font-size: 13px;
+    }
+
+    @media (max-width: 600px) {
+      .hero h1 {
+        font-size: 26px;
+      }
+
+      .info {
+        grid-template-columns: 1fr;
+      }
+
+      .card {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <div class="logo">USDTMZ</div>
+  <div class="status">● Online</div>
+</header>
+
+<section class="hero">
+  <h1>USDTMZ</h1>
+  <p>Compre e venda USDT de forma simples.</p>
+</section>
+
+<main class="container">
+
+  <section class="card">
+    <h2>Conversor USDT / MZN</h2>
+
+    <div class="tabs">
+      <button id="buyBtn" class="active" onclick="setMode('buy')">
+        Comprar USDT
+      </button>
+
+      <button id="sellBtn" onclick="setMode('sell')">
+        Vender USDT
+      </button>
+    </div>
+
+    <label id="amountLabel">Valor em MZN</label>
+
+    <input
+      type="number"
+      id="amount"
+      placeholder="Ex.: 640"
+      min="1"
+      oninput="calculate()"
+    >
+
+    <div class="result">
+      <span id="resultLabel">Você receberá aproximadamente</span>
+      <strong id="result">0 USDT</strong>
+    </div>
+
+    <p style="margin-top:12px;font-size:13px;color:#687386;">
+      Taxa de referência: 1 USDT = 64 MZN.
+      O valor final poderá variar quando o serviço real estiver conectado.
+    </p>
+  </section>
+
+
+  <section class="card">
+    <h2>Fazer pedido</h2>
+
+    <label>Tipo de operação</label>
+
+    <select id="operation" onchange="updateForm()">
+      <option value="buy">Comprar USDT</option>
+      <option value="sell">Vender USDT</option>
+    </select>
+
+    <label>Nome</label>
+
+    <input
+      type="text"
+      id="name"
+      placeholder="Seu nome"
+    >
+
+    <label>Telefone</label>
+
+    <input
+      type="tel"
+      id="phone"
+      placeholder="Ex.: 84xxxxxxx"
+    >
+
+    <label id="paymentLabel">Método de pagamento</label>
+
+    <select id="payment">
+      <option value="">Selecione</option>
+      <option value="mpesa">M-Pesa</option>
+      <option value="emola">e-Mola</option>
+    </select>
+
+    <button class="main-btn" onclick="createOrder()">
+      Continuar pedido
+    </button>
+
+    <div class="success" id="success"></div>
+
+  </section>
+
+
+  <section class="card">
+    <h2>Por que usar USDTMZ?</h2>
+
+    <div class="info">
+      <div>
+        <b>⚡ Rápido</b>
+        <span>Processo simples</span>
+      </div>
+
+      <div>
+        <b>🔒 Seguro</b>
+        <span>Proteção de dados</span>
+      </div>
+
+      <div>
+        <b>📱 Fácil</b>
+        <span>Feito para celular</span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  © 2026 USDTMZ — Plataforma em desenvolvimento.
+</footer>
+
+
+<script>
+
+  const RATE = 64;
+
+  let mode = "buy";
+
+
+  function setMode(newMode) {
+
+    mode = newMode;
+
+    document.getElementById("buyBtn")
+      .classList.toggle("active", mode === "buy");
+
+    document.getElementById("sellBtn")
+      .classList.toggle("active", mode === "sell");
+
+    const amountLabel = document.getElementById("amountLabel");
+
+    if (mode === "buy") {
+      amountLabel.innerText = "Valor em MZN";
+    } else {
+      amountLabel.innerText = "Quantidade em USDT";
+    }
+
+    calculate();
+  }
+
+
+  function calculate() {
+
+    const amount =
+      parseFloat(document.getElementById("amount").value) || 0;
+
+    const result = document.getElementById("result");
+    const resultLabel = document.getElementById("resultLabel");
+
+    if (mode === "buy") {
+
+      const usdt = amount / RATE;
+
+      result.innerText =
+        usdt.toFixed(2) + " USDT";
+
+      resultLabel.innerText =
+        "Você receberá aproximadamente";
+
+    } else {
+
+      const mzn = amount * RATE;
+
+      result.innerText =
+        mzn.toFixed(2) + " MZN";
+
+      resultLabel.innerText =
+        "Você receberá aproximadamente";
+    }
+  }
+
+
+  function updateForm() {
+
+    const operation =
+      document.getElementById("operation").value;
+
+    mode = operation;
+
+    setMode(operation);
+  }
+
+
+  function createOrder() {
+
+    const name =
+      document.getElementById("name").value.trim();
+
+    const phone =
+      document.getElementById("phone").value.trim();
+
+    const payment =
+      document.getElementById("payment").value;
+
+    const amount =
+      parseFloat(document.getElementById("amount").value) || 0;
+
+    const success =
+      document.getElementById("success");
+
+
+    if (!name || !phone || !payment || amount <= 0) {
+
+      alert(
+        "Preencha todos os campos e informe um valor válido."
+      );
+
+      return;
+    }
+
+
+    const orderNumber =
+      "USDTMZ-" +
+      Date.now().toString().slice(-6);
+
+
+    let value;
+
+    if (mode === "buy") {
+      value = (amount / RATE).toFixed(2) + " USDT";
+    } else {
+      value = (amount * RATE).toFixed(2) + " MZN";
+    }
+
+
+    success.style.display = "block";
+
+    success.innerHTML =
+      "<strong>Pedido criado!</strong><br>" +
+      "Número: " + orderNumber + "<br>" +
+      "Cliente: " + escapeHtml(name) + "<br>" +
+      "Telefone: " + escapeHtml(phone) + "<br>" +
+      "Valor: " + value + "<br>" +
+      "Pagamento: " + payment.toUpperCase() +
+      "<br><br>" +
+      "Este é apenas um pedido de demonstração. " +
+      "Nenhum pagamento foi efetuado.";
+
+    success.scrollIntoView({
+      behavior: "smooth"
+    });
+  }
+
+
+  function escapeHtml(text) {
+
+    const div = document.createElement("div");
+
+    div.textContent = text;
+
+    return div.innerHTML;
+  }
+
+</script>
+
+</body>
+</html>
