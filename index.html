@@ -421,13 +421,81 @@
         operation: mode,
         amount: amount,
         payment: payment
+      })async function requestWithdraw() {
+
+  const address = document
+    .getElementById("walletAddress")
+    .value
+    .trim();
+
+  const amount = Number(
+    document
+      .getElementById("withdrawAmount")
+      .value
+  );
+
+  const result = document
+    .getElementById("withdrawResult");
+
+  if (!address || !amount || amount <= 0) {
+    result.style.display = "block";
+    result.innerHTML =
+      "Informe o endereço TRC20 e uma quantidade válida.";
+    return;
+  }
+
+  result.style.display = "block";
+  result.innerHTML = "A processar pedido...";
+
+  try {
+
+    const response = await fetch("/api/binance", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        address: address,
+        amount: amount
       })
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || "Erro ao enviar pedido.");
+      throw new Error(
+        data.message || "Erro no pedido."
+      );
+    }
+
+    result.innerHTML =
+      "<strong>Pedido criado!</strong><br>" +
+      "ID: " +
+      escapeHtml(data.withdrawalId) +
+      "<br>" +
+      "Rede: TRON (TRC20)<br>" +
+      "Quantidade: " +
+      Number(data.amount).toFixed(6) +
+      " USDT<br>" +
+      "Estado: " +
+      escapeHtml(data.status) +
+      "<br><br>" +
+      "<small>Modo de teste: nenhum USDT foi enviado.</small>";
+
+  } catch (error) {
+
+    result.innerHTML =
+      "<strong>Erro.</strong><br>" +
+      escapeHtml(error.message);
+
+  }
+}
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "ao enviar pedido.");
     }
 
     success.innerHTML =
@@ -437,7 +505,7 @@
 
   } catch (error) {
     success.innerHTML =
-      "<strong>Não foi possível enviar o pedido.</strong><br>" +
+      "<strong>é  possível enviar o pedido.</strong><br>" +
       escapeHtml(error.message);
   }
 }
