@@ -1,20 +1,18 @@
-
 <!DOCTYPE html>
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>USDTMZ - Compra e Venda de USDT</title>
+  <title>USDTMZ</title>
 
   <style>
     * {
       box-sizing: border-box;
-      margin: 0;
-      padding: 0;
       font-family: Arial, sans-serif;
     }
 
     body {
+      margin: 0;
       background: #f4f7fb;
       color: #172033;
     }
@@ -22,182 +20,87 @@
     header {
       background: #0b5cff;
       color: white;
-      padding: 18px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .logo {
-      font-size: 24px;
-      font-weight: bold;
-    }
-
-    .status {
-      font-size: 13px;
-      background: #0a9f55;
-      padding: 7px 10px;
-      border-radius: 20px;
-    }
-
-    .hero {
-      background: linear-gradient(135deg, #0b5cff, #063baf);
-      color: white;
-      padding: 45px 20px;
+      padding: 18px;
       text-align: center;
     }
 
-    .hero h1 {
-      font-size: 32px;
-      margin-bottom: 12px;
-    }
-
-    .hero p {
-      font-size: 16px;
-      opacity: .9;
+    header h1 {
+      margin: 0;
     }
 
     .container {
-      max-width: 900px;
-      margin: -25px auto 40px;
-      padding: 0 15px;
+      max-width: 600px;
+      margin: 25px auto;
+      padding: 15px;
     }
 
     .card {
       background: white;
-      border-radius: 18px;
-      padding: 25px;
-      box-shadow: 0 8px 30px rgba(0,0,0,.08);
+      padding: 22px;
       margin-bottom: 20px;
+      border-radius: 16px;
+      box-shadow: 0 5px 20px rgba(0,0,0,.08);
     }
 
-    .card h2 {
-      margin-bottom: 20px;
-      font-size: 21px;
-    }
-
-    .tabs {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-
-    .tabs button {
-      flex: 1;
-      padding: 13px;
-      border: none;
-      border-radius: 10px;
-      background: #e9eef8;
-      cursor: pointer;
-      font-weight: bold;
-    }
-
-    .tabs button.active {
-      background: #0b5cff;
-      color: white;
+    h2 {
+      margin-top: 0;
     }
 
     label {
       display: block;
-      margin: 14px 0 7px;
+      margin-top: 15px;
+      margin-bottom: 6px;
       font-weight: bold;
-      font-size: 14px;
     }
 
-    input, select {
+    input,
+    select {
       width: 100%;
       padding: 14px;
-      border: 1px solid #d5dbea;
+      border: 1px solid #ccd3df;
       border-radius: 10px;
       font-size: 16px;
-      outline: none;
     }
 
-    input:focus, select:focus {
-      border-color: #0b5cff;
+    button {
+      width: 100%;
+      padding: 15px;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 10px;
+      background: #0b5cff;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
     }
 
     .result {
-      background: #eef5ff;
-      border-radius: 12px;
-      padding: 18px;
       margin-top: 18px;
+      padding: 15px;
+      background: #eef5ff;
+      border-radius: 10px;
       text-align: center;
     }
 
     .result strong {
       display: block;
-      font-size: 27px;
-      color: #0b5cff;
+      font-size: 25px;
       margin-top: 5px;
+      color: #0b5cff;
     }
 
-    .main-btn {
-      width: 100%;
-      border: none;
-      padding: 16px;
-      margin-top: 20px;
-      background: #0b5cff;
-      color: white;
-      border-radius: 10px;
-      font-size: 17px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    .main-btn:hover {
-      opacity: .9;
-    }
-
-    .info {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      margin-top: 20px;
-    }
-
-    .info div {
-      background: #f7f9fd;
-      padding: 18px 10px;
-      text-align: center;
-      border-radius: 12px;
-    }
-
-    .info b {
-      display: block;
-      margin-bottom: 5px;
-    }
-
-    .success {
+    .message {
       display: none;
+      margin-top: 15px;
+      padding: 15px;
+      border-radius: 10px;
       background: #e8fff2;
-      border: 1px solid #8be0b0;
-      color: #08753c;
-      padding: 18px;
-      border-radius: 12px;
-      margin-top: 20px;
-      line-height: 1.6;
     }
 
     footer {
       text-align: center;
       padding: 25px;
       color: #687386;
-      font-size: 13px;
-    }
-
-    @media (max-width: 600px) {
-      .hero h1 {
-        font-size: 26px;
-      }
-
-      .info {
-        grid-template-columns: 1fr;
-      }
-
-      .card {
-        padding: 20px;
-      }
     }
   </style>
 </head>
@@ -205,307 +108,233 @@
 <body>
 
 <header>
-  <div class="logo">USDTMZ</div>
-  <div class="status">● Online</div>
-</header>
-
-<section class="hero">
   <h1>USDTMZ</h1>
-  <p>Compre e venda USDT de forma simples.</p>
-</section>
+  <p>Compra e venda de USDT</p>
+</header>
 
 <main class="container">
 
   <section class="card">
+
     <h2>Conversor USDT / MZN</h2>
 
-    <div class="tabs">
-      <button id="buyBtn" class="active" onclick="setMode('buy')">
-        Comprar USDT
-      </button>
+    <label>Operação</label>
 
-      <button id="sellBtn" onclick="setMode('sell')">
-        Vender USDT
-      </button>
-    </div>
-
-    <label id="amountLabel">Valor em MZN</label>
-
-    <input
-      type="number"
-      id="amount"
-      placeholder="Ex.: 640"
-      min="1"
-      oninput="calculate()"
-    >
-
-    <div class="result">
-      <span id="resultLabel">Você receberá aproximadamente</span>
-      <strong id="result">0 USDT</strong>
-    </div>
-
-    <p style="margin-top:12px;font-size:13px;color:#687386;">
-      Taxa de referência: 1 USDT = 64 MZN.
-      O valor final poderá variar quando o serviço real estiver conectado.
-    </p>
-  </section>
-
-
-  <section class="card">
-    <h2>Fazer pedido</h2>
-
-    <label>Tipo de operação</label>
-
-    <select id="operation" onchange="updateForm()">
+    <select id="operation" onchange="calculate()">
       <option value="buy">Comprar USDT</option>
       <option value="sell">Vender USDT</option>
     </select>
 
+    <label id="amountLabel">Valor em MZN</label>
+
+    <input
+      id="amount"
+      type="number"
+      min="0"
+      placeholder="Ex.: 640"
+      oninput="calculate()"
+    >
+
+    <div class="result">
+      <span>Você receberá aproximadamente</span>
+      <strong id="result">0 USDT</strong>
+    </div>
+
+    <p>
+      Taxa de referência:
+      <strong>1 USDT = 64 MZN</strong>
+    </p>
+
+  </section>
+
+
+  <section class="card">
+
+    <h2>Fazer pedido</h2>
+
     <label>Nome</label>
 
     <input
-      type="text"
       id="name"
+      type="text"
       placeholder="Seu nome"
     >
 
     <label>Telefone</label>
 
     <input
-      type="tel"
       id="phone"
-      placeholder="Ex.: 84xxxxxxx"
+      type="tel"
+      placeholder="84xxxxxxx"
     >
 
-    <label id="paymentLabel">Método de pagamento</label>
-
-    <select id="payment">
-      <option value="">Selecione</option>
-      <option value="mpesa">M-Pesa</option>
-      <option value="emola">e-Mola</option>
-    </select>
-
-    <button class="main-btn" onclick="createOrder()">
+    <button onclick="createOrder()">
       Continuar pedido
     </button>
 
-    <div class="success" id="success"></div>
+    <div id="orderMessage" class="message"></div>
 
   </section>
 
 
   <section class="card">
-    <h2>Por que usar USDTMZ?</h2>
 
-    <div class="info">
-      <div>
-        <b>⚡ Rápido</b>
-        <span>Processo simples</span>
-      </div>
+    <h2>Minha carteira</h2>
 
-      <div>
-        <b>🔒 Seguro</b>
-        <span>Proteção de dados</span>
-      </div>
-
-      <div>
-        <b>📱 Fácil</b>
-        <span>Feito para celular</span>
-      </div>
+    <div class="result">
+      <span>Saldo de teste</span>
+      <strong>0.00 USDT</strong>
     </div>
+
+    <button onclick="showTestMessage()">
+      Enviar para minha Binance
+    </button>
+
+    <div id="testMessage" class="message"></div>
+
   </section>
 
 </main>
 
 <footer>
-  © 2026 USDTMZ — Plataforma em desenvolvimento.
+  © 2026 USDTMZ
 </footer>
 
 
 <script>
 
-  const RATE = 64;
-
-  let mode = "buy";
+const RATE = 64;
 
 
-  function setMode(newMode) {
+function calculate() {
 
-    mode = newMode;
+  const operation =
+    document.getElementById("operation").value;
 
-    document.getElementById("buyBtn")
-      .classList.toggle("active", mode === "buy");
+  const amount =
+    Number(document.getElementById("amount").value) || 0;
 
-    document.getElementById("sellBtn")
-      .classList.toggle("active", mode === "sell");
+  const label =
+    document.getElementById("amountLabel");
 
-    const amountLabel = document.getElementById("amountLabel");
+  const result =
+    document.getElementById("result");
 
-    if (mode === "buy") {
-      amountLabel.innerText = "Valor em MZN";
-    } else {
-      amountLabel.innerText = "Quantidade em USDT";
-    }
 
-    calculate();
+  if (operation === "buy") {
+
+    label.innerText = "Valor em MZN";
+
+    result.innerText =
+      (amount / RATE).toFixed(2) + " USDT";
+
+  } else {
+
+    label.innerText = "Quantidade em USDT";
+
+    result.innerText =
+      (amount * RATE).toFixed(2) + " MZN";
   }
+}
 
 
-  function calculate() {
+async function createOrder() {
 
-    const amount =
-      parseFloat(document.getElementById("amount").value) || 0;
+  const name =
+    document.getElementById("name").value.trim();
 
-    const result = document.getElementById("result");
-    const resultLabel = document.getElementById("resultLabel");
+  const phone =
+    document.getElementById("phone").value.trim();
 
-    if (mode === "buy") {
+  const amount =
+    Number(document.getElementById("amount").value);
 
-      const usdt = amount / RATE;
+  const operation =
+    document.getElementById("operation").value;
 
-      result.innerText =
-        usdt.toFixed(2) + " USDT";
-
-      resultLabel.innerText =
-        "Você receberá aproximadamente";
-
-    } else {
-
-      const mzn = amount * RATE;
-
-      result.innerText =
-        mzn.toFixed(2) + " MZN";
-
-      resultLabel.innerText =
-        "Você receberá aproximadamente";
-    }
-  }
+  const message =
+    document.getElementById("orderMessage");
 
 
-  function updateForm() {
+  if (!name || !phone || !amount || amount <= 0) {
 
-    const operation =
-      document.getElementById("operation").value;
+    alert(
+      "Preencha o nome, telefone e valor."
+    );
 
-    mode = operation;
-
-    setMode(operation);
-  }
-
-
-  function createOrder() async function createOrder() {
-
-  const name = document.getElementById("name").value.trim();
-  const phone = document.getElementById("phone").value.trim();
-  const payment = document.getElementById("payment").value;
-  const amount = parseFloat(document.getElementById("amount").value) || 0;
-  const success = document.getElementById("success");
-
-  if (!name || !phone || !payment || amount <= 0) {
-    alert("Preencha todos os campos e informe um valor válido.");
     return;
   }
 
-  success.style.display = "block";
-  success.innerHTML = "A enviar o pedido...";
 
-  try {
-    const response = await fetch("/api/order", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        name: name,
-        phone: phone,
-        operation: mode,
-        amount: amount,
-        payment: payment
-      })async function requestWithdraw() {
+  message.style.display = "block";
 
-  const address = document
-    .getElementById("walletAddress")
-    .value
-    .trim();
+  message.innerText =
+    "A preparar o pedido...";
 
-  const amount = Number(
-    document
-      .getElementById("withdrawAmount")
-      .value
-  );
-
-  const result = document
-    .getElementById("withdrawResult");
-
-  if (!address || !amount || amount <= 0) {
-    result.style.display = "block";
-    result.innerHTML =
-      "Informe o endereço TRC20 e uma quantidade válida.";
-    return;
-  }
-
-  result.style.display = "block";
-  result.innerHTML = "A processar pedido...";
 
   try {
 
-    const response = await fetch("/api/binance", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        address: address,
-        amount: amount
-      })
-    });
+    const response =
+      await fetch("/api/order", {
 
-    const data = await response.json();
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          name: name,
+          phone: phone,
+          operation: operation,
+          amount: amount
+        })
+      });
+
+
+    const data =
+      await response.json();
+
 
     if (!response.ok) {
+
       throw new Error(
-        data.message || "Erro no pedido."
+        data.message ||
+        "Não foi possível criar o pedido."
       );
     }
 
-    result.innerHTML =
-      "<strong>Pedido criado!</strong><br>" +
-      "ID: " +
-      escapeHtml(data.withdrawalId) +
-      "<br>" +
-      "Rede: TRON (TRC20)<br>" +
-      "Quantidade: " +
-      Number(data.amount).toFixed(6) +
-      " USDT<br>" +
-      "Estado: " +
-      escapeHtml(data.status) +
-      "<br><br>" +
-      "<small>Modo de teste: nenhum USDT foi enviado.</small>";
 
-  } catch (error) {
-
-    result.innerHTML =
-      "<strong>Erro.</strong><br>" +
-      escapeHtml(error.message);
-
-  }
-}
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || "ao enviar pedido.");
-    }
-
-    success.innerHTML =
+    message.innerHTML =
       "<strong>Pedido recebido!</strong><br>" +
-      "Número: " + escapeHtml(data.orderId) + "<br>" +
-      "Estado: Aguardando confirmação";
+      "Número: " +
+      data.orderId +
+      "<br>Estado: PENDING";
+
 
   } catch (error) {
-    success.innerHTML =
-      "<strong>é  possível enviar o pedido.</strong><br>" +
-      escapeHtml(error.message);
+
+    message.innerText =
+      "A API ainda não está configurada.";
+
   }
 }
+
+
+function showTestMessage() {
+
+  const message =
+    document.getElementById("testMessage");
+
+  message.style.display = "block";
+
+  message.innerHTML =
+    "<strong>Modo de teste</strong><br>" +
+    "O envio para Binance será configurado " +
+    "depois. Nenhum USDT real foi movimentado.";
+}
+
+</script>
+
+</body>
+</html>
