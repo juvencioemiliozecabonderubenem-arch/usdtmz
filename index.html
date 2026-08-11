@@ -163,9 +163,15 @@
     <label>Telefone</label>
 
     <input
-      id="phone"
-      type="tel"
-      placeholder="84xxxxxxx"
+      <label>Método de pagamento</label>
+
+<select id="payment">
+  <option value="">Selecione</option>
+  <option value="mpesa">M-Pesa</option>
+  <option value="emola">e-Mola</option>
+</select>
+      
+
     >
 
     <button onclick="createOrder()">
