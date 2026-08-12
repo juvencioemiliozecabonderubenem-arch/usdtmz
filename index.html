@@ -20,7 +20,7 @@
     header {
       background: #0b5cff;
       color: white;
-      padding: 18px;
+      padding: 20px;
       text-align: center;
     }
 
@@ -72,6 +72,11 @@
       color: white;
       font-size: 16px;
       font-weight: bold;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #172033;
     }
 
     .result {
@@ -89,12 +94,40 @@
       color: #0b5cff;
     }
 
+    .wallet-balance {
+      font-size: 32px !important;
+    }
+
     .message {
       display: none;
       margin-top: 15px;
       padding: 15px;
       border-radius: 10px;
       background: #e8fff2;
+    }
+
+    .demo {
+      font-size: 13px;
+      text-align: center;
+      color: #687386;
+      margin-top: 10px;
+    }
+
+    .history {
+      margin-top: 20px;
+    }
+
+    .transaction {
+      padding: 12px;
+      border-bottom: 1px solid #e5e9f0;
+    }
+
+    .address {
+      word-break: break-all;
+      font-size: 13px;
+      background: #f4f7fb;
+      padding: 10px;
+      border-radius: 8px;
     }
 
     footer {
@@ -113,6 +146,8 @@
 </header>
 
 <main class="container">
+
+  <!-- CONVERSOR -->
 
   <section class="card">
 
@@ -136,7 +171,7 @@
     >
 
     <div class="result">
-      <span>Você receberá aproximadamente</span>
+      <span>Resultado</span>
       <strong id="result">0 USDT</strong>
     </div>
 
@@ -147,6 +182,8 @@
 
   </section>
 
+
+  <!-- PEDIDO -->
 
   <section class="card">
 
@@ -160,19 +197,21 @@
       placeholder="Seu nome"
     >
 
-    <label>Telefone</label>
+    <label>Telefone M-Pesa/e-Mola</label>
 
     <input
-      <label>Método de pagamento</label>
-
-<select id="payment">
-  <option value="">Selecione</option>
-  <option value="mpesa">M-Pesa</option>
-  <option value="emola">e-Mola</option>
-</select>
-      
-
+      id="phone"
+      type="tel"
+      placeholder="25884XXXXXXX"
     >
+
+    <label>Método de pagamento</label>
+
+    <select id="payment">
+      <option value="">Selecione</option>
+      <option value="mpesa">M-Pesa</option>
+      <option value="emola">e-Mola</option>
+    </select>
 
     <button onclick="createOrder()">
       Continuar pedido
@@ -183,20 +222,87 @@
   </section>
 
 
+  <!-- CARTEIRA -->
+
   <section class="card">
 
     <h2>Minha carteira</h2>
 
     <div class="result">
-      <span>Saldo de teste</span>
-      <strong>0.00 USDT</strong>
+
+      <span>Saldo de demonstração</span>
+
+      <strong
+        id="walletBalance"
+        class="wallet-balance"
+      >
+        100.00 USDT
+      </strong>
+
     </div>
 
-    <button onclick="showTestMessage()">
-      Enviar para minha Binance
+    <p>
+      Endereço TRC20 de demonstração:
+    </p>
+
+    <div class="address">
+      TDemoUSDTMZ123456789000000000000
+    </div>
+
+    <button onclick="openSend()">
+      Enviar USDT
     </button>
 
-    <div id="testMessage" class="message"></div>
+    <div id="sendArea" style="display:none;">
+
+      <label>Endereço TRC20</label>
+
+      <input
+        id="recipient"
+        type="text"
+        placeholder="Endereço TRC20 de demonstração"
+      >
+
+      <label>Quantidade de USDT</label>
+
+      <input
+        id="sendAmount"
+        type="number"
+        min="0"
+        step="0.01"
+        placeholder="Ex.: 10"
+      >
+
+      <button
+        class="secondary"
+        onclick="sendDemoUSDT()"
+      >
+        Confirmar envio de demonstração
+      </button>
+
+    </div>
+
+    <div
+      id="sendMessage"
+      class="message"
+    ></div>
+
+    <div class="history">
+
+      <h3>Histórico</h3>
+
+      <div id="historyList">
+        <div class="transaction">
+          Carteira criada — 100.00 USDT
+        </div>
+      </div>
+
+    </div>
+
+    <p class="demo">
+      ⚠️ Carteira de demonstração. Nenhum USDT real
+      é movimentado.
+    </p>
 
   </section>
 
@@ -211,6 +317,10 @@
 
 const RATE = 64;
 
+let walletBalance = 100;
+
+
+/* CONVERSOR */
 
 function calculate() {
 
@@ -218,7 +328,9 @@ function calculate() {
     document.getElementById("operation").value;
 
   const amount =
-    Number(document.getElementById("amount").value) || 0;
+    Number(
+      document.getElementById("amount").value
+    ) || 0;
 
   const label =
     document.getElementById("amountLabel");
@@ -229,43 +341,64 @@ function calculate() {
 
   if (operation === "buy") {
 
-    label.innerText = "Valor em MZN";
+    label.innerText =
+      "Valor em MZN";
 
     result.innerText =
-      (amount / RATE).toFixed(2) + " USDT";
+      (amount / RATE).toFixed(2)
+      + " USDT";
 
   } else {
 
-    label.innerText = "Quantidade em USDT";
+    label.innerText =
+      "Quantidade em USDT";
 
     result.innerText =
-      (amount * RATE).toFixed(2) + " MZN";
+      (amount * RATE).toFixed(2)
+      + " MZN";
   }
 }
 
 
+/* PEDIDO */
+
 async function createOrder() {
 
   const name =
-    document.getElementById("name").value.trim();
+    document.getElementById("name")
+      .value.trim();
 
   const phone =
-    document.getElementById("phone").value.trim();
+    document.getElementById("phone")
+      .value.trim();
 
   const amount =
-    Number(document.getElementById("amount").value);
+    Number(
+      document.getElementById("amount").value
+    );
 
   const operation =
-    document.getElementById("operation").value;
+    document.getElementById("operation")
+      .value;
+
+  const payment =
+    document.getElementById("payment")
+      .value;
 
   const message =
     document.getElementById("orderMessage");
 
 
-  if (!name || !phone || !amount || amount <= 0) {
+  if (
+    !name ||
+    !phone ||
+    !amount ||
+    amount <= 0 ||
+    !payment
+  ) {
 
     alert(
-      "Preencha o nome, telefone e valor."
+      "Preencha todos os campos."
     );
 
     return;
@@ -281,21 +414,27 @@ async function createOrder() {
   try {
 
     const response =
-      await fetch("/api/order", {
+      await fetch(
+        "/api/order",
+        {
+          method: "POST",
 
-        method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
 
-        headers: {
-          "Content-Type": "application/json"
-        },
+          body: JSON.stringify({
 
-        body: JSON.stringify({
-          name: name,
-          phone: phone,
-          operation: operation,
-          amount: amount
-        })
-      });
+            name,
+            phone,
+            operation,
+            payment,
+            amount
+
+          })
+        }
+      );
 
 
     const data =
@@ -306,7 +445,7 @@ async function createOrder() {
 
       throw new Error(
         data.message ||
-        "Não foi possível criar o pedido."
+        "Erro ao criar pedido."
       );
     }
 
@@ -321,24 +460,138 @@ async function createOrder() {
   } catch (error) {
 
     message.innerText =
-      "A API ainda não está configurada.";
+      "Modo de demonstração: " +
+      "pedido criado localmente.";
 
   }
+
 }
 
 
-function showTestMessage() {
+/* CARTEIRA */
+
+function openSend() {
+
+  document.getElementById(
+    "sendArea"
+  ).style.display = "block";
+
+}
+
+
+function sendDemoUSDT() {
+
+  const recipient =
+    document.getElementById(
+      "recipient"
+    ).value.trim();
+
+  const amount =
+    Number(
+      document.getElementById(
+        "sendAmount"
+      ).value
+    );
 
   const message =
-    document.getElementById("testMessage");
+    document.getElementById(
+      "sendMessage"
+    );
 
-  message.style.display = "block";
+
+  if (!recipient || !amount) {
+
+    alert(
+      "Informe o endereço e o valor."
+    );
+
+    return;
+  }
+
+
+  if (amount <= 0) {
+
+    alert(
+      "O valor deve ser maior que zero."
+    );
+
+    return;
+  }
+
+
+  if (amount > walletBalance) {
+
+    alert(
+      "Saldo de demonstração insuficiente."
+    );
+
+    return;
+  }
+
+
+  walletBalance -= amount;
+
+
+  document.getElementById(
+    "walletBalance"
+  ).innerText =
+    walletBalance.toFixed(2)
+    + " USDT";
+
+
+  message.style.display =
+    "block";
+
 
   message.innerHTML =
-    "<strong>Modo de teste</strong><br>" +
-    "O envio para Binance será configurado " +
-    "depois. Nenhum USDT real foi movimentado.";
+    "<strong>Envio simulado!</strong><br>" +
+    amount.toFixed(2) +
+    " USDT seriam enviados para:<br>" +
+    recipient;
+
+
+  const history =
+    document.getElementById(
+      "historyList"
+    );
+
+
+  const transaction =
+    document.createElement(
+      "div"
+    );
+
+
+  transaction.className =
+    "transaction";
+
+
+  transaction.innerHTML =
+    "Envio de demonstração: " +
+    amount.toFixed(2) +
+    " USDT<br>" +
+    "Estado: SIMULADO";
+
+
+  history.prepend(
+    transaction
+  );
+
+
+  document.getElementById(
+    "recipient"
+  ).value = "";
+
+  document.getElementById(
+    "sendAmount"
+  ).value = "";
+
 }
+
+
+/* INICIALIZAÇÃO */
+
+calculate();
 
 </script>
 
