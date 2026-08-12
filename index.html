@@ -157,7 +157,6 @@
 
   </section>
 
-
   <section class="card">
 
     <h2>Fazer pedido</h2>
@@ -194,7 +193,6 @@
 
   </section>
 
-
   <section class="card">
 
     <h2>Carteira USDTMZ</h2>
@@ -228,7 +226,6 @@
 <footer>
   © 2026 USDTMZ
 </footer>
-
 
 <script>
 
@@ -350,6 +347,7 @@ async function createOrder() {
     if (!response.ok) {
 
       throw new Error(
+        data.error ||
         data.message ||
         "O servidor recusou o pedido."
       );
@@ -372,7 +370,7 @@ async function createOrder() {
       "<strong>Pedido criado com sucesso!</strong><br><br>" +
 
       "Número do pedido: <strong>" +
-      order.id +
+      (order.order_id || order.id) +
       "</strong><br>" +
 
       "Operação: " +
@@ -390,7 +388,7 @@ async function createOrder() {
       "<br>" +
 
       "USDT: " +
-      order.usdtAmount.toFixed(2) +
+      Number(order.usdt_amount || order.usdtAmount).toFixed(2) +
       "<br>" +
 
       "Estado: <strong>" +
