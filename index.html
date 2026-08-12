@@ -20,7 +20,7 @@
     header {
       background: #0b5cff;
       color: white;
-      padding: 20px;
+      padding: 22px;
       text-align: center;
     }
 
@@ -75,10 +75,6 @@
       cursor: pointer;
     }
 
-    button.secondary {
-      background: #172033;
-    }
-
     .result {
       margin-top: 18px;
       padding: 15px;
@@ -94,40 +90,20 @@
       color: #0b5cff;
     }
 
-    .wallet-balance {
-      font-size: 32px !important;
-    }
-
     .message {
       display: none;
       margin-top: 15px;
       padding: 15px;
       border-radius: 10px;
-      background: #e8fff2;
+      background: #eef5ff;
     }
 
-    .demo {
-      font-size: 13px;
+    .status {
+      margin-top: 15px;
+      padding: 15px;
+      border-radius: 10px;
+      background: #fff8e1;
       text-align: center;
-      color: #687386;
-      margin-top: 10px;
-    }
-
-    .history {
-      margin-top: 20px;
-    }
-
-    .transaction {
-      padding: 12px;
-      border-bottom: 1px solid #e5e9f0;
-    }
-
-    .address {
-      word-break: break-all;
-      font-size: 13px;
-      background: #f4f7fb;
-      padding: 10px;
-      border-radius: 8px;
     }
 
     footer {
@@ -147,8 +123,6 @@
 
 <main class="container">
 
-  <!-- CONVERSOR -->
-
   <section class="card">
 
     <h2>Conversor USDT / MZN</h2>
@@ -166,6 +140,7 @@
       id="amount"
       type="number"
       min="0"
+      step="0.01"
       placeholder="Ex.: 640"
       oninput="calculate()"
     >
@@ -182,8 +157,6 @@
 
   </section>
 
-
-  <!-- PEDIDO -->
 
   <section class="card">
 
@@ -214,7 +187,7 @@
     </select>
 
     <button onclick="createOrder()">
-      Continuar pedido
+      Criar pedido
     </button>
 
     <div id="orderMessage" class="message"></div>
@@ -222,87 +195,31 @@
   </section>
 
 
-  <!-- CARTEIRA -->
-
   <section class="card">
 
-    <h2>Minha carteira</h2>
+    <h2>Carteira USDTMZ</h2>
 
-    <div class="result">
-
-      <span>Saldo de demonstração</span>
-
-      <strong
-        id="walletBalance"
-        class="wallet-balance"
-      >
-        100.00 USDT
-      </strong>
-
+    <div class="status">
+      A carteira USDT será disponibilizada após a
+      integração segura da infraestrutura blockchain.
     </div>
 
     <p>
-      Endereço TRC20 de demonstração:
+      <strong>Saldo:</strong> indisponível
     </p>
 
-    <div class="address">
-      TDemoUSDTMZ123456789000000000000
-    </div>
+    <p>
+      <strong>Endereço TRC20:</strong> indisponível
+    </p>
 
-    <button onclick="openSend()">
-      Enviar USDT
+    <button
+      type="button"
+      onclick="walletInfo()"
+    >
+      Consultar carteira
     </button>
 
-    <div id="sendArea" style="display:none;">
-
-      <label>Endereço TRC20</label>
-
-      <input
-        id="recipient"
-        type="text"
-        placeholder="Endereço TRC20 de demonstração"
-      >
-
-      <label>Quantidade de USDT</label>
-
-      <input
-        id="sendAmount"
-        type="number"
-        min="0"
-        step="0.01"
-        placeholder="Ex.: 10"
-      >
-
-      <button
-        class="secondary"
-        onclick="sendDemoUSDT()"
-      >
-        Confirmar envio de demonstração
-      </button>
-
-    </div>
-
-    <div
-      id="sendMessage"
-      class="message"
-    ></div>
-
-    <div class="history">
-
-      <h3>Histórico</h3>
-
-      <div id="historyList">
-        <div class="transaction">
-          Carteira criada — 100.00 USDT
-        </div>
-      </div>
-
-    </div>
-
-    <p class="demo">
-      ⚠️ Carteira de demonstração. Nenhum USDT real
-      é movimentado.
-    </p>
+    <div id="walletMessage" class="message"></div>
 
   </section>
 
@@ -316,8 +233,6 @@
 <script>
 
 const RATE = 64;
-
-let walletBalance = 100;
 
 
 /* CONVERSOR */
@@ -341,12 +256,11 @@ function calculate() {
 
   if (operation === "buy") {
 
-    label.innerText =
-      "Valor em MZN";
+    label.innerText = "Valor em MZN";
 
     result.innerText =
-      (amount / RATE).toFixed(2)
-      + " USDT";
+      (amount / RATE).toFixed(2) +
+      " USDT";
 
   } else {
 
@@ -354,23 +268,21 @@ function calculate() {
       "Quantidade em USDT";
 
     result.innerText =
-      (amount * RATE).toFixed(2)
-      + " MZN";
+      (amount * RATE).toFixed(2) +
+      " MZN";
   }
 }
 
 
-/* PEDIDO */
+/* CRIAR PEDIDO */
 
 async function createOrder() {
 
   const name =
-    document.getElementById("name")
-      .value.trim();
+    document.getElementById("name").value.trim();
 
   const phone =
-    document.getElementById("phone")
-      .value.trim();
+    document.getElementById("phone").value.trim();
 
   const amount =
     Number(
@@ -378,63 +290,57 @@ async function createOrder() {
     );
 
   const operation =
-    document.getElementById("operation")
-      .value;
+    document.getElementById("operation").value;
 
   const payment =
-    document.getElementById("payment")
-      .value;
+    document.getElementById("payment").value;
 
   const message =
     document.getElementById("orderMessage");
 
 
+  message.style.display = "block";
+
+
   if (
     !name ||
     !phone ||
-    !amount ||
-    amount <= 0 ||
-    !payment
+    !payment ||
+    !Number.isFinite(amount) ||
+    amount <= 0
   ) {
 
-    alert(
-      "Preencha todos os campos."
-    );
+    message.innerHTML =
+      "<strong>Preencha todos os campos corretamente.</strong>";
 
     return;
   }
 
 
-  message.style.display = "block";
-
   message.innerText =
-    "A preparar o pedido...";
+    "A criar o pedido...";
 
 
   try {
 
     const response =
-      await fetch(
-        "/api/order",
-        {
-          method: "POST",
+      await fetch("/api/order", {
 
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
+        method: "POST",
 
-          body: JSON.stringify({
+        headers: {
+          "Content-Type": "application/json"
+        },
 
-            name,
-            phone,
-            operation,
-            payment,
-            amount
+        body: JSON.stringify({
+          name,
+          phone,
+          operation,
+          payment,
+          amount
+        })
 
-          })
-        }
-      );
+      });
 
 
     const data =
@@ -445,23 +351,65 @@ async function createOrder() {
 
       throw new Error(
         data.message ||
-        "Erro ao criar pedido."
+        "O servidor recusou o pedido."
       );
     }
 
 
+    if (!data.order) {
+
+      throw new Error(
+        "Resposta inválida da API."
+      );
+    }
+
+
+    const order =
+      data.order;
+
+
     message.innerHTML =
-      "<strong>Pedido recebido!</strong><br>" +
-      "Número: " +
-      data.orderId +
-      "<br>Estado: PENDING";
+      "<strong>Pedido criado com sucesso!</strong><br><br>" +
+
+      "Número do pedido: <strong>" +
+      order.id +
+      "</strong><br>" +
+
+      "Operação: " +
+      (operation === "buy"
+        ? "Comprar USDT"
+        : "Vender USDT") +
+      "<br>" +
+
+      "Pagamento: " +
+      payment.toUpperCase() +
+      "<br>" +
+
+      "Valor: " +
+      amount.toFixed(2) +
+      "<br>" +
+
+      "USDT: " +
+      order.usdtAmount.toFixed(2) +
+      "<br>" +
+
+      "Estado: <strong>" +
+      order.status +
+      "</strong>";
 
 
   } catch (error) {
 
-    message.innerText =
-      "Modo de demonstração: " +
-      "pedido criado localmente.";
+    console.error(
+      "USDTMZ API ERROR:",
+      error
+    );
+
+
+    message.innerHTML =
+      "<strong>Não foi possível criar o pedido.</strong><br><br>" +
+      "Erro: " +
+      error.message;
 
   }
 
@@ -470,126 +418,23 @@ async function createOrder() {
 
 /* CARTEIRA */
 
-function openSend() {
-
-  document.getElementById(
-    "sendArea"
-  ).style.display = "block";
-
-}
-
-
-function sendDemoUSDT() {
-
-  const recipient =
-    document.getElementById(
-      "recipient"
-    ).value.trim();
-
-  const amount =
-    Number(
-      document.getElementById(
-        "sendAmount"
-      ).value
-    );
+function walletInfo() {
 
   const message =
     document.getElementById(
-      "sendMessage"
+      "walletMessage"
     );
 
-
-  if (!recipient || !amount) {
-
-    alert(
-      "Informe o endereço e o valor."
-    );
-
-    return;
-  }
-
-
-  if (amount <= 0) {
-
-    alert(
-      "O valor deve ser maior que zero."
-    );
-
-    return;
-  }
-
-
-  if (amount > walletBalance) {
-
-    alert(
-      "Saldo de demonstração insuficiente."
-    );
-
-    return;
-  }
-
-
-  walletBalance -= amount;
-
-
-  document.getElementById(
-    "walletBalance"
-  ).innerText =
-    walletBalance.toFixed(2)
-    + " USDT";
-
-
-  message.style.display =
-    "block";
-
+  message.style.display = "block";
 
   message.innerHTML =
-    "<strong>Envio simulado!</strong><br>" +
-    amount.toFixed(2) +
-    " USDT seriam enviados para:<br>" +
-    recipient;
-
-
-  const history =
-    document.getElementById(
-      "historyList"
-    );
-
-
-  const transaction =
-    document.createElement(
-      "div"
-    );
-
-
-  transaction.className =
-    "transaction";
-
-
-  transaction.innerHTML =
-    "Envio de demonstração: " +
-    amount.toFixed(2) +
-    " USDT<br>" +
-    "Estado: SIMULADO";
-
-
-  history.prepend(
-    transaction
-  );
-
-
-  document.getElementById(
-    "recipient"
-  ).value = "";
-
-  document.getElementById(
-    "sendAmount"
-  ).value = "";
+    "<strong>Carteira ainda não conectada.</strong><br>" +
+    "Nenhum saldo ou endereço fictício será apresentado. " +
+    "A integração blockchain será adicionada quando a infraestrutura " +
+    "de carteira estiver configurada com segurança.";
 
 }
 
-
-/* INICIALIZAÇÃO */
 
 calculate();
 
