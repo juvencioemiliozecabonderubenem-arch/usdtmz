@@ -1,5 +1,8 @@
-export default async function handler(req, res) {
+import { neon } from "@neondatabase/serverless";
 
+const sql = neon(process.env.DATABASE_URL);
+
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({
       success: false,
@@ -8,15 +11,15 @@ export default async function handler(req, res) {
   }
 
   try {
-
     const {
       name,
       phone,
       operation,
+      payment,
       amount
     } = req.body || {};
 
-    if (!name || !phone || !operation || !amount) {
+    if (!name || !phone || !operation || !payment || amount === undefined) {
       return res.status(400).json({
         success: false,
         message: "Preencha todos os campos."
@@ -30,6 +33,13 @@ export default async function handler(req, res) {
       });
     }
 
+    if (!["mpesa", "emola"].includes(payment)) {
+      return res.status(400).json({
+        success: false,
+        message: "Método de pagamento inválido."
+      });
+    }
+
     const value = Number(amount);
 
     if (!Number.isFinite(value) || value <= 0) {
@@ -39,24 +49,67 @@ export default async function handler(req, res) {
       });
     }
 
+    const RATE = 64;
+
+    const usdtAmount =
+      operation === "buy"
+        ? value / RATE
+        : value;
+
     const orderId =
       "USDTMZ-" +
       Date.now().toString(36).toUpperCase();
 
+    const result = await sql`
+      INSERT INTO orders (
+        order_id,
+        name,
+        phone,
+        operation,
+        payment,
+        amount,
+        usdt_amount,
+        rate,
+        status
+      )
+      VALUES (
+        ${orderId},
+        ${name},
+        ${phone},
+        ${operation},
+        ${payment},
+        ${value},
+        ${usdtAmount},
+        ${RATE},
+        'PENDING'
+      )
+      RETURNING
+        order_id,
+        status,
+        created_at
+    `;
+
     return res.status(201).json({
       success: true,
-      orderId: orderId,
-      status: "PENDING",
-      message: "Pedido recebido com sucesso."
+      message: "Pedido USDTMZ criado e guardado.",
+      order: {
+        id: result[0].order_id,
+        status: result[0].status,
+        createdAt: result[0].created_at,
+        operation,
+        payment,
+        amount: value,
+        rate: RATE,
+        usdtAmount: Number(usdtAmount.toFixed(2))
+      }
     });
 
   } catch (error) {
-
-    console.error(error);
+    console.error("USDTMZ DATABASE ERROR:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Erro interno do servidor."
+      message: "Não foi possível guardar o pedido."
     });
   }
 }
