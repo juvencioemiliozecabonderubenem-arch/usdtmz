@@ -1,64 +1,77 @@
 import { neon } from "@neondatabase/serverless";
 
-const sql = neon(process.env.DATABASE_URL);
+const RATE = 64;
+
+function json(res, status, data) {
+  res.status(status);
+  res.setHeader("Content-Type", "application/json");
+  return res.json(data);
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({
+    return json(res, 405, {
       success: false,
       message: "Método não permitido."
     });
   }
 
   try {
-    const {
-      name,
-      phone,
-      operation,
-      payment,
-      amount
-    } = req.body || {};
+    const databaseUrl = process.env.DATABASE_URL;
 
-    if (!name || !phone || !operation || !payment || amount === undefined) {
-      return res.status(400).json({
+    if (!databaseUrl) {
+      return json(res, 500, {
+        success: false,
+        message: "DATABASE_URL não configurada no Vercel."
+      });
+    }
+
+    const body = req.body || {};
+
+    const name = String(body.name || "").trim();
+    const phone = String(body.phone || "").trim();
+    const operation = String(body.operation || "").trim();
+    const payment = String(body.payment || "").trim();
+    const amount = Number(body.amount);
+
+    if (!name || !phone || !operation || !payment) {
+      return json(res, 400, {
         success: false,
         message: "Preencha todos os campos."
       });
     }
 
     if (!["buy", "sell"].includes(operation)) {
-      return res.status(400).json({
+      return json(res, 400, {
         success: false,
         message: "Operação inválida."
       });
     }
 
     if (!["mpesa", "emola"].includes(payment)) {
-      return res.status(400).json({
+      return json(res, 400, {
         success: false,
         message: "Método de pagamento inválido."
       });
     }
 
-    const value = Number(amount);
-
-    if (!Number.isFinite(value) || value <= 0) {
-      return res.status(400).json({
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return json(res, 400, {
         success: false,
         message: "Valor inválido."
       });
     }
 
-    const RATE = 64;
-
     const usdtAmount =
       operation === "buy"
-        ? value / RATE
-        : value;
+        ? amount / RATE
+        : amount;
 
     const orderId =
       "USDTMZ-" +
       Date.now().toString(36).toUpperCase();
+
+    const sql = neon(databaseUrl);
 
     const result = await sql`
       INSERT INTO orders (
@@ -78,38 +91,49 @@ export default async function handler(req, res) {
         ${phone},
         ${operation},
         ${payment},
-        ${value},
+        ${amount},
         ${usdtAmount},
         ${RATE},
         'PENDING'
       )
       RETURNING
+        id,
         order_id,
+        operation,
+        payment,
+        amount,
+        usdt_amount,
+        rate,
         status,
         created_at
     `;
 
-    return res.status(201).json({
+    const order = result[0];
+
+    return json(res, 201, {
       success: true,
-      message: "Pedido USDTMZ criado e guardado.",
+      message: "Pedido criado com sucesso.",
       order: {
-        id: result[0].order_id,
-        status: result[0].status,
-        createdAt: result[0].created_at,
-        operation,
-        payment,
-        amount: value,
-        rate: RATE,
-        usdtAmount: Number(usdtAmount.toFixed(2))
+        id: order.order_id,
+        databaseId: order.id,
+        operation: order.operation,
+        payment: order.payment,
+        amount: Number(order.amount),
+        usdtAmount: Number(order.usdt_amount),
+        rate: Number(order.rate),
+        status: order.status,
+        createdAt: order.created_at
       }
     });
 
   } catch (error) {
-    console.error("USDTMZ DATABASE ERROR:", error);
 
-    return res.status(500).json({
+    console.error("USDTMZ BACKEND ERROR:", error);
+
+    return json(res, 500, {
       success: false,
-      message: "Não foi possível guardar o pedido."
+      message: "Erro interno do backend.",
+      error: error.message
     });
   }
 }
