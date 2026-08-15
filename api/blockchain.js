@@ -1,3 +1,35 @@
+const TRON_API = "https://api.shasta.trongrid.io";
+
+const USDT_CONTRACT =
+  "TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs";
+
+function tronAddressToHex(address) {
+  const alphabet =
+    "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+  let num = 0n;
+
+  for (const char of address) {
+    const value = alphabet.indexOf(char);
+
+    if (value < 0) {
+      throw new Error("Endereço TRON inválido.");
+    }
+
+    num = num * 58n + BigInt(value);
+  }
+
+  let hex = num.toString(16);
+
+  hex = hex.padStart(42, "0");
+
+  if (!hex.startsWith("41")) {
+    throw new Error("Endereço TRON inválido.");
+  }
+
+  return hex;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({
@@ -7,7 +39,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const address = String(req.query.address || "").trim();
+    const address =
+      String(req.query.address || "").trim();
 
     if (!address) {
       return res.status(400).json({
@@ -16,7 +49,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Validação básica de endereço TRON
     if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) {
       return res.status(400).json({
         success: false,
@@ -24,42 +56,71 @@ export default async function handler(req, res) {
       });
     }
 
-    const url =
-      `https://api.shasta.trongrid.io/v1/accounts/${address}`;
+    const addressHex =
+      tronAddressToHex(address);
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Accept": "application/json"
+    const parameter =
+      addressHex.padStart(64, "0");
+
+    const response = await fetch(
+      `${TRON_API}/wallet/triggerconstantcontract`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({
+          contract_address: USDT_CONTRACT,
+          function_selector: "balanceOf(address)",
+          parameter,
+          owner_address: address,
+          visible: true
+        })
       }
-    });
+    );
 
-    const data = await response.json();
+    const data =
+      await response.json();
 
-    if (!response.ok) {
-      console.error("TRONGRID ERROR:", data);
+    if (!response.ok || data.result?.result !== true) {
+      console.error(
+        "TRON BALANCE ERROR:",
+        data
+      );
 
-      return res.status(response.status).json({
+      return res.status(502).json({
         success: false,
-        error: "A rede TRON não respondeu corretamente."
+        error: "A TRON não conseguiu consultar o saldo."
       });
     }
 
-    const account = data.data?.[0] || null;
+    const raw =
+      data.constant_result?.[0] || "0";
+
+    const units =
+      BigInt("0x" + raw);
+
+    // USDT normalmente usa 6 casas decimais.
+    const balance =
+      Number(units) / 1_000_000;
 
     return res.status(200).json({
       success: true,
       network: "Shasta Testnet",
       address,
-      account: account || {
-        address,
-        activated: false
-      },
-      blockchain: data
+      token: "USDT",
+      standard: "TRC-20",
+      contract: USDT_CONTRACT,
+      balance: balance.toFixed(6),
+      rawBalance: units.toString()
     });
 
   } catch (error) {
-    console.error("USDTMZ BLOCKCHAIN ERROR:", error);
+    console.error(
+      "USDTMZ BLOCKCHAIN ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
