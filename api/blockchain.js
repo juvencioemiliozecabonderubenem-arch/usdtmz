@@ -1,7 +1,8 @@
-const TRON_API = "https://api.shasta.trongrid.io";
+const TRON_API = "https://api.trongrid.io";
 
+// USDT TRC-20 oficial na TRON Mainnet
 const USDT_CONTRACT =
-  "TG3XXyExBkPp9nzdajDZsozEu4BkaSJozs";
+  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 
 function tronAddressToHex(address) {
   const alphabet =
@@ -12,7 +13,7 @@ function tronAddressToHex(address) {
   for (const char of address) {
     const value = alphabet.indexOf(char);
 
-    if (value < 0) {
+    if (value === -1) {
       throw new Error("Endereço TRON inválido.");
     }
 
@@ -31,14 +32,16 @@ function tronAddressToHex(address) {
 }
 
 export default async function handler(req, res) {
+
   if (req.method !== "GET") {
     return res.status(405).json({
       success: false,
-      error: "Método não permitido"
+      error: "Método não permitido."
     });
   }
 
   try {
+
     const address =
       String(req.query.address || "").trim();
 
@@ -59,23 +62,39 @@ export default async function handler(req, res) {
     const addressHex =
       tronAddressToHex(address);
 
+    /*
+     * balanceOf(address)
+     *
+     * O parâmetro precisa ser ABI encoded.
+     */
     const parameter =
-      addressHex.padStart(64, "0");
+      addressHex.slice(2).padStart(64, "0");
 
     const response = await fetch(
       `${TRON_API}/wallet/triggerconstantcontract`,
       {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
+
         body: JSON.stringify({
-          contract_address: USDT_CONTRACT,
-          function_selector: "balanceOf(address)",
+
+          contract_address:
+            USDT_CONTRACT,
+
+          function_selector:
+            "balanceOf(address)",
+
           parameter,
-          owner_address: address,
+
+          owner_address:
+            address,
+
           visible: true
+
         })
       }
     );
@@ -83,48 +102,96 @@ export default async function handler(req, res) {
     const data =
       await response.json();
 
-    if (!response.ok || data.result?.result !== true) {
+    if (!response.ok) {
+
       console.error(
-        "TRON BALANCE ERROR:",
+        "TRON API ERROR:",
         data
       );
 
       return res.status(502).json({
         success: false,
-        error: "A TRON não conseguiu consultar o saldo."
+        error: "Erro ao consultar a TRON Mainnet."
       });
     }
 
-    const raw =
-      data.constant_result?.[0] || "0";
+    if (
+      !data.result ||
+      data.result.result !== true ||
+      !data.constant_result ||
+      !data.constant_result[0]
+    ) {
+
+      console.error(
+        "TRON CONTRACT ERROR:",
+        data
+      );
+
+      return res.status(502).json({
+        success: false,
+        error: "Não foi possível obter o saldo USDT."
+      });
+    }
+
+    const rawBalance =
+      data.constant_result[0];
 
     const units =
-      BigInt("0x" + raw);
+      BigInt("0x" + rawBalance);
 
-    // USDT normalmente usa 6 casas decimais.
+    /*
+     * USDT TRC-20 utiliza 6 casas decimais.
+     */
+    const whole =
+      units / 1000000n;
+
+    const decimals =
+      (units % 1000000n)
+        .toString()
+        .padStart(6, "0");
+
     const balance =
-      Number(units) / 1_000_000;
+      `${whole}.${decimals}`;
 
     return res.status(200).json({
+
       success: true,
-      network: "Shasta Testnet",
+
+      network:
+        "TRON Mainnet",
+
+      token:
+        "USDT",
+
+      standard:
+        "TRC-20",
+
+      contract:
+        USDT_CONTRACT,
+
       address,
-      token: "USDT",
-      standard: "TRC-20",
-      contract: USDT_CONTRACT,
-      balance: balance.toFixed(6),
-      rawBalance: units.toString()
+
+      balance,
+
+      rawBalance:
+        units.toString()
+
     });
 
   } catch (error) {
+
     console.error(
       "USDTMZ BLOCKCHAIN ERROR:",
       error
     );
 
     return res.status(500).json({
+
       success: false,
-      error: "Erro ao consultar a blockchain."
+
+      error:
+        "Erro interno ao consultar a blockchain."
+
     });
   }
 }
