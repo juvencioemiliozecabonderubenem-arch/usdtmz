@@ -1,682 +1,183 @@
-<!DOCTYPE html>
-<html lang="pt">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>USDTMZ</title>
-
-  <style>
-    * {
-      box-sizing: border-box;
-      font-family: Arial, sans-serif;
-    }
-
-    body {
-      margin: 0;
-      background: #f4f7fb;
-      color: #172033;
-    }
-
-    header {
-      background: #0b5cff;
-      color: white;
-      padding: 22px;
-      text-align: center;
-    }
-
-    header h1 {
-      margin: 0;
-    }
-
-    .container {
-      max-width: 600px;
-      margin: 25px auto;
-      padding: 15px;
-    }
-
-    .card {
-      background: white;
-      padding: 22px;
-      margin-bottom: 20px;
-      border-radius: 16px;
-      box-shadow: 0 5px 20px rgba(0,0,0,.08);
-    }
-
-    h2 {
-      margin-top: 0;
-    }
-
-    label {
-      display: block;
-      margin-top: 15px;
-      margin-bottom: 6px;
-      font-weight: bold;
-    }
-
-    input,
-    select {
-      width: 100%;
-      padding: 14px;
-      border: 1px solid #ccd3df;
-      border-radius: 10px;
-      font-size: 16px;
-    }
-
-    button {
-      width: 100%;
-      padding: 15px;
-      margin-top: 18px;
-      border: 0;
-      border-radius: 10px;
-      background: #0b5cff;
-      color: white;
-      font-size: 16px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    button:disabled {
-      opacity: .6;
-      cursor: wait;
-    }
-
-    .result {
-      margin-top: 18px;
-      padding: 15px;
-      background: #eef5ff;
-      border-radius: 10px;
-      text-align: center;
-    }
-
-    .result strong {
-      display: block;
-      font-size: 25px;
-      margin-top: 5px;
-      color: #0b5cff;
-    }
-
-    .message {
-      display: none;
-      margin-top: 15px;
-      padding: 15px;
-      border-radius: 10px;
-      background: #eef5ff;
-      line-height: 1.6;
-    }
-
-    .status {
-      margin-top: 15px;
-      padding: 15px;
-      border-radius: 10px;
-      background: #fff8e1;
-      text-align: center;
-      line-height: 1.5;
-    }
-
-    .wallet-data {
-      margin-top: 15px;
-      padding: 15px;
-      border: 1px solid #e1e6ef;
-      border-radius: 10px;
-      background: #fafcff;
-      line-height: 1.8;
-      word-break: break-word;
-    }
-
-    footer {
-      text-align: center;
-      padding: 25px;
-      color: #687386;
-    }
-  </style>
-</head>
-
-<body>
-
-<header>
-  <h1>USDTMZ</h1>
-  <p>Compra e venda de USDT</p>
-</header>
-
-<main class="container">
-
-  <!-- CONVERSOR -->
-
-  <section class="card">
-
-    <h2>Conversor USDT / MZN</h2>
-
-    <label>Operação</label>
-
-    <select id="operation" onchange="calculate()">
-      <option value="buy">Comprar USDT</option>
-      <option value="sell">Vender USDT</option>
-    </select>
-
-    <label id="amountLabel">
-      Valor em MZN
-    </label>
-
-    <input
-      id="amount"
-      type="number"
-      min="0"
-      step="0.01"
-      placeholder="Ex.: 640"
-      oninput="calculate()"
-    >
-
-    <div class="result">
-
-      <span>Resultado</span>
-
-      <strong id="result">
-        0.00 USDT
-      </strong>
-
-    </div>
-
-    <p>
-      Taxa de referência:
-      <strong>1 USDT = 64 MZN</strong>
-    </p>
-
-  </section>
-
-
-  <!-- PEDIDO -->
-
-  <section class="card">
-
-    <h2>Fazer pedido</h2>
-
-    <label>Nome</label>
-
-    <input
-      id="name"
-      type="text"
-      placeholder="Seu nome"
-    >
-
-    <label>
-      Telefone M-Pesa/e-Mola
-    </label>
-
-    <input
-      id="phone"
-      type="tel"
-      placeholder="25884XXXXXXX"
-    >
-
-    <label>
-      Método de pagamento
-    </label>
-
-    <select id="payment">
-
-      <option value="">
-        Selecione
-      </option>
-
-      <option value="mpesa">
-        M-Pesa
-      </option>
-
-      <option value="emola">
-        e-Mola
-      </option>
-
-    </select>
-
-    <button
-      type="button"
-      onclick="createOrder()">
-
-      Criar pedido
-
-    </button>
-
-    <div
-      id="orderMessage"
-      class="message">
-    </div>
-
-  </section>
-
-
-  <!-- CARTEIRA -->
-
-  <section class="card">
-
-    <h2>Carteira USDTMZ</h2>
-
-    <div class="status">
-
-      <strong>Shasta Testnet</strong>
-
-      <br>
-
-      Esta carteira está em modo de teste.
-
-      <br>
-
-      Nenhuma transação real será enviada.
-
-    </div>
-
-    <div id="walletData">
-
-      <div class="wallet-data">
-
-        <strong>Saldo:</strong>
-        aguardando consulta
-
-        <br>
-
-        <strong>Endereço:</strong>
-        TYPTFGmdPxoHxWRu8KYdEfqJsTCSsLfuw7
-
-      </div>
-
-    </div>
-
-    <button
-      id="walletButton"
-      type="button"
-      onclick="walletInfo()">
-
-      Consultar blockchain
-
-    </button>
-
-    <div
-      id="walletMessage"
-      class="message">
-    </div>
-
-  </section>
-
-</main>
-
-<footer>
-  © 2026 USDTMZ
-</footer>
-
-
-<script>
-
-const RATE = 64;
-
-
-/*
-==================================================
-ENDEREÇO DA CARTEIRA DE TESTE
-==================================================
-*/
-
-const WALLET_ADDRESS =
-  "TYPTFGmdPxoHxWRu8KYdEfqJsTCSsLfuw7";
-
-
-/*
-==================================================
-CONVERSOR
-==================================================
-*/
-
-function calculate() {
-
-  const operation =
-    document.getElementById("operation").value;
-
-  const amount =
-    Number(
-      document.getElementById("amount").value
-    ) || 0;
-
-  const label =
-    document.getElementById("amountLabel");
-
-  const result =
-    document.getElementById("result");
-
-
-  if (operation === "buy") {
-
-    label.innerText =
-      "Valor em MZN";
-
-    result.innerText =
-      (amount / RATE).toFixed(2) +
-      " USDT";
-
-  } else {
-
-    label.innerText =
-      "Quantidade em USDT";
-
-    result.innerText =
-      (amount * RATE).toFixed(2) +
-      " MZN";
-  }
-}
-
-
-/*
-==================================================
-CRIAR PEDIDO
-==================================================
-*/
-
-async function createOrder() {
-
-  const name =
-    document.getElementById("name").value.trim();
-
-  const phone =
-    document.getElementById("phone").value.trim();
-
-  const amount =
-    Number(
-      document.getElementById("amount").value
-    );
-
-  const operation =
-    document.getElementById("operation").value;
-
-  const payment =
-    document.getElementById("payment").value;
-
-  const message =
-    document.getElementById("orderMessage");
-
-
-  message.style.display = "block";
-
-
-  if (
-    !name ||
-    !phone ||
-    !payment ||
-    !Number.isFinite(amount) ||
-    amount <= 0
-  ) {
-
-    message.innerHTML =
-      "<strong>" +
-      "Preencha todos os campos corretamente." +
-      "</strong>";
-
-    return;
-  }
-
-
-  message.innerText =
-    "A criar o pedido...";
-
-
-  try {
-
-    const response =
-      await fetch("/api/order", {
-
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json"
-        },
-
-        body: JSON.stringify({
-          name,
-          phone,
-          operation,
-          payment,
-          amount
-        })
-
-      });
-
-
-    const data =
-      await response.json();
-
-
-    if (!response.ok) {
-
-      throw new Error(
-        data.error ||
-        data.message ||
-        "O servidor recusou o pedido."
-      );
-
-    }
-
-
-    if (!data.order) {
-
-      throw new Error(
-        "Resposta inválida da API."
-      );
-
-    }
-
-
-    const order =
-      data.order;
-
-
-    message.innerHTML =
-
-      "<strong>" +
-      "Pedido criado com sucesso!" +
-      "</strong><br><br>" +
-
-      "Número do pedido: <strong>" +
-      (order.order_id || order.id) +
-      "</strong><br>" +
-
-      "Operação: " +
-
-      (
-        operation === "buy"
-          ? "Comprar USDT"
-          : "Vender USDT"
-      ) +
-
-      "<br>" +
-
-      "Pagamento: " +
-      payment.toUpperCase() +
-
-      "<br>" +
-
-      "Valor: " +
-      amount.toFixed(2) +
-      " MZN<br>" +
-
-      "USDT: " +
-
-      Number(
-        order.usdt_amount ||
-        order.usdtAmount ||
-        0
-      ).toFixed(2) +
-
-      "<br>" +
-
-      "Estado: <strong>" +
-      order.status +
-      "</strong>";
-
-  }
-
-  catch (error) {
-
-    console.error(
-      "USDTMZ ORDER ERROR:",
-      error
-    );
-
-
-    message.innerHTML =
-
-      "<strong>" +
-      "Não foi possível criar o pedido." +
-      "</strong><br><br>" +
-
-      "Erro: " +
-      error.message;
-
-  }
-
-}
-
-
-/*
-==================================================
-CONSULTAR BLOCKCHAIN
-==================================================
-*/
-
 async function walletInfo() {
 
   const message =
-    document.getElementById(
-      "walletMessage"
-    );
+    document.getElementById("walletMessage");
 
   const walletData =
-    document.getElementById(
-      "walletData"
-    );
+    document.getElementById("walletData");
+
+  const walletStatus =
+    document.getElementById("walletStatus");
 
   const button =
-    document.getElementById(
-      "walletButton"
-    );
+    document.getElementById("walletButton");
 
-
-  message.style.display =
-    "block";
+  message.style.display = "block";
 
   message.innerText =
-    "A consultar a blockchain Shasta...";
-
+    "A consultar a TRON Mainnet...";
 
   button.disabled = true;
 
-
   try {
 
-    /*
-    ----------------------------------------------
-    CHAMADA DIRETA À API BLOCKCHAIN
-    ----------------------------------------------
-    */
-
-    const url =
-      "/api/blockchain?address=" +
-      encodeURIComponent(
-        WALLET_ADDRESS
-      );
-
-
     const response =
-      await fetch(url);
+      await fetch("/api/wallet");
 
-
-    const data =
+    const walletDataResponse =
       await response.json();
-
 
     if (
       !response.ok ||
-      !data.success
+      !walletDataResponse.success
     ) {
 
       throw new Error(
-        data.error ||
-        "A blockchain não respondeu corretamente."
+        walletDataResponse.error ||
+        "Não foi possível obter a carteira."
       );
 
     }
 
+    const wallet =
+      walletDataResponse.wallet;
+
+    if (!wallet) {
+
+      throw new Error(
+        "Nenhuma carteira configurada."
+      );
+
+    }
 
     /*
-    ----------------------------------------------
-    MOSTRAR DADOS DA BLOCKCHAIN
-    ----------------------------------------------
-    */
+     * O endereço e a rede vêm do servidor.
+     */
+
+    const address =
+      wallet.address;
+
+    if (!address) {
+
+      throw new Error(
+        "A carteira não possui endereço configurado."
+      );
+
+    }
+
+    /*
+     * Consulta diretamente a blockchain.
+     */
+
+    const responseBlockchain =
+      await fetch(
+        "/api/blockchain?address=" +
+        encodeURIComponent(address)
+      );
+
+    const blockchain =
+      await responseBlockchain.json();
+
+    if (
+      !responseBlockchain.ok ||
+      !blockchain.success
+    ) {
+
+      throw new Error(
+        blockchain.error ||
+        "A TRON Mainnet não respondeu."
+      );
+
+    }
+
+    /*
+     * Dados oficiais retornados pela blockchain.
+     */
+
+    const network =
+      blockchain.network ||
+      "TRON Mainnet";
+
+    const token =
+      blockchain.token ||
+      "USDT";
 
     const balance =
-      data.balance || "0.000000";
+      blockchain.balance ||
+      "0.000000";
 
+    const contract =
+      blockchain.contract ||
+      "Não informado";
+
+    /*
+     * Atualiza a interface.
+     */
+
+    walletStatus.innerHTML =
+      "<strong>Blockchain conectada</strong><br>" +
+      "Consulta realizada diretamente na TRON.";
 
     walletData.innerHTML = `
 
       <div class="wallet-data">
 
         <strong>Rede:</strong>
-        ${data.network || "Shasta Testnet"}
+        ${network}
 
         <br>
 
         <strong>Ativo:</strong>
-        ${data.token || "USDT"}
+        ${token}
 
         <br>
 
         <strong>Padrão:</strong>
-        ${data.standard || "TRC-20"}
+        TRC-20
 
         <br>
 
-        <strong>Saldo blockchain:</strong>
+        <strong>Saldo:</strong>
         ${balance} USDT
 
         <br>
 
         <strong>Endereço:</strong>
-        ${data.address || WALLET_ADDRESS}
+        ${address}
 
         <br>
 
         <strong>Contrato:</strong>
-        ${data.contract || "Não informado"}
+        ${contract}
 
         <br>
 
         <strong>Estado:</strong>
-        TESTE
+        Mainnet
 
       </div>
 
     `;
 
-
     message.innerHTML =
       "<strong>" +
-      "Blockchain consultada com sucesso." +
+      "Consulta concluída com sucesso." +
       "</strong>";
-
 
   }
 
   catch (error) {
 
     console.error(
-      "USDTMZ BLOCKCHAIN ERROR:",
+      "USDTMZ WALLET ERROR:",
       error
     );
 
+    walletStatus.innerText =
+      "Não foi possível consultar a blockchain.";
 
     message.innerHTML =
-
-      "<strong>" +
-      "Não foi possível consultar a blockchain." +
-      "</strong><br><br>" +
-
+      "<strong>Erro:</strong><br>" +
       error.message;
 
   }
@@ -688,17 +189,3 @@ async function walletInfo() {
   }
 
 }
-
-
-/*
-==================================================
-INICIALIZAÇÃO
-==================================================
-*/
-
-calculate();
-
-</script>
-
-</body>
-</html>
