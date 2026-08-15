@@ -2,7 +2,11 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
   <title>USDTMZ</title>
 
   <style>
@@ -20,18 +24,25 @@
     header {
       background: #0b5cff;
       color: white;
-      padding: 22px;
+      padding: 24px 18px;
       text-align: center;
     }
 
     header h1 {
       margin: 0;
+      font-size: 30px;
+    }
+
+    header p {
+      margin: 8px 0 0;
+      opacity: .9;
     }
 
     .container {
-      max-width: 600px;
+      width: 100%;
+      max-width: 650px;
       margin: 25px auto;
-      padding: 15px;
+      padding: 0 15px;
     }
 
     .card {
@@ -44,12 +55,13 @@
 
     h2 {
       margin-top: 0;
+      margin-bottom: 18px;
     }
 
     label {
       display: block;
       margin-top: 15px;
-      margin-bottom: 6px;
+      margin-bottom: 7px;
       font-weight: bold;
     }
 
@@ -60,6 +72,12 @@
       border: 1px solid #ccd3df;
       border-radius: 10px;
       font-size: 16px;
+      outline: none;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: #0b5cff;
     }
 
     button {
@@ -75,9 +93,18 @@
       cursor: pointer;
     }
 
+    button:disabled {
+      opacity: .6;
+      cursor: not-allowed;
+    }
+
+    .secondary {
+      background: #172033;
+    }
+
     .result {
       margin-top: 18px;
-      padding: 15px;
+      padding: 18px;
       background: #eef5ff;
       border-radius: 10px;
       text-align: center;
@@ -85,8 +112,8 @@
 
     .result strong {
       display: block;
-      font-size: 25px;
-      margin-top: 5px;
+      font-size: 26px;
+      margin-top: 6px;
       color: #0b5cff;
     }
 
@@ -97,6 +124,7 @@
       border-radius: 10px;
       background: #eef5ff;
       line-height: 1.6;
+      word-break: break-word;
     }
 
     .status {
@@ -104,23 +132,52 @@
       padding: 15px;
       border-radius: 10px;
       background: #fff8e1;
-      text-align: center;
       line-height: 1.5;
     }
 
     .wallet-data {
       margin-top: 15px;
-      padding: 15px;
+      padding: 16px;
       border: 1px solid #e1e6ef;
       border-radius: 10px;
       background: #fafcff;
-      line-height: 1.8;
+      line-height: 1.9;
+      word-break: break-word;
+    }
+
+    .network {
+      display: inline-block;
+      padding: 5px 9px;
+      border-radius: 20px;
+      background: #fff3cd;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .tx-list {
+      margin-top: 15px;
+    }
+
+    .tx {
+      padding: 12px;
+      margin-top: 10px;
+      border: 1px solid #e1e6ef;
+      border-radius: 10px;
+      background: white;
+      font-size: 14px;
+      line-height: 1.6;
+      word-break: break-word;
+    }
+
+    .hidden {
+      display: none;
     }
 
     footer {
       text-align: center;
       padding: 25px;
       color: #687386;
+      font-size: 14px;
     }
   </style>
 </head>
@@ -134,17 +191,29 @@
 
 <main class="container">
 
-  <!-- CONVERSOR -->
+  <!-- =========================
+       CONVERSOR
+  ========================== -->
 
   <section class="card">
 
     <h2>Conversor USDT / MZN</h2>
 
-    <label>Operação</label>
+    <label for="operation">
+      Operação
+    </label>
 
-    <select id="operation" onchange="calculate()">
-      <option value="buy">Comprar USDT</option>
-      <option value="sell">Vender USDT</option>
+    <select
+      id="operation"
+      onchange="calculate()"
+    >
+      <option value="buy">
+        Comprar USDT
+      </option>
+
+      <option value="sell">
+        Vender USDT
+      </option>
     </select>
 
     <label id="amountLabel">
@@ -161,11 +230,15 @@
     >
 
     <div class="result">
-      <span>Resultado</span>
+
+      <span>
+        Resultado
+      </span>
 
       <strong id="result">
-        0 USDT
+        0.00 USDT
       </strong>
+
     </div>
 
     <p>
@@ -176,13 +249,17 @@
   </section>
 
 
-  <!-- PEDIDO -->
+  <!-- =========================
+       PEDIDO
+  ========================== -->
 
   <section class="card">
 
     <h2>Fazer pedido</h2>
 
-    <label>Nome</label>
+    <label for="name">
+      Nome
+    </label>
 
     <input
       id="name"
@@ -190,7 +267,7 @@
       placeholder="Seu nome"
     >
 
-    <label>
+    <label for="phone">
       Telefone M-Pesa/e-Mola
     </label>
 
@@ -200,7 +277,7 @@
       placeholder="25884XXXXXXX"
     >
 
-    <label>
+    <label for="payment">
       Método de pagamento
     </label>
 
@@ -220,30 +297,46 @@
 
     </select>
 
-    <button onclick="createOrder()">
+    <button
+      id="createOrderButton"
+      onclick="createOrder()"
+    >
       Criar pedido
     </button>
 
     <div
       id="orderMessage"
-      class="message">
-    </div>
+      class="message"
+    ></div>
 
   </section>
 
 
-  <!-- CARTEIRA -->
+  <!-- =========================
+       CARTEIRA BLOCKCHAIN
+  ========================== -->
 
   <section class="card">
 
-    <h2>Carteira USDTMZ</h2>
+    <h2>
+      Carteira USDTMZ
+    </h2>
 
     <div class="status">
-      Consulta da infraestrutura da carteira.
+
+      <span class="network">
+        TRON SHASTA TESTNET
+      </span>
+
+      <br><br>
+
+      Consulta da infraestrutura blockchain.
       Nenhum saldo ou endereço será inventado.
+
     </div>
 
     <div id="walletData">
+
       <p>
         <strong>Saldo:</strong>
         indisponível
@@ -253,18 +346,60 @@
         <strong>Endereço TRC20:</strong>
         indisponível
       </p>
+
     </div>
 
     <button
+      id="walletButton"
       type="button"
-      onclick="walletInfo()">
+      onclick="walletInfo()"
+    >
       Consultar carteira
     </button>
 
     <div
       id="walletMessage"
-      class="message">
-    </div>
+      class="message"
+    ></div>
+
+    <div
+      id="transactionList"
+      class="tx-list hidden"
+    ></div>
+
+  </section>
+
+
+  <!-- =========================
+       INFORMAÇÕES
+  ========================== -->
+
+  <section class="card">
+
+    <h2>
+      Infraestrutura
+    </h2>
+
+    <p>
+      A USDTMZ utiliza uma arquitetura separada
+      entre o site, API, banco de dados e
+      infraestrutura blockchain.
+    </p>
+
+    <p>
+      <strong>Rede atual:</strong>
+      TRON Shasta Testnet
+    </p>
+
+    <p>
+      <strong>Estado:</strong>
+      Ambiente de testes
+    </p>
+
+    <p>
+      Transferências reais permanecem
+      desativadas durante o desenvolvimento.
+    </p>
 
   </section>
 
@@ -277,7 +412,53 @@
 
 <script>
 
+"use strict";
+
+
+/* =========================
+   CONFIGURAÇÃO
+========================= */
+
 const RATE = 64;
+
+const API = {
+  wallet: "/api/wallet",
+  blockchain: "/api/blockchain",
+  order: "/api/order"
+};
+
+
+/* =========================
+   UTILITÁRIOS
+========================= */
+
+function escapeHtml(value) {
+
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+
+async function readJson(response) {
+
+  const text =
+    await response.text();
+
+  try {
+
+    return JSON.parse(text);
+
+  } catch {
+
+    throw new Error(
+      "O servidor retornou uma resposta inválida."
+    );
+  }
+}
 
 
 /* =========================
@@ -329,10 +510,14 @@ function calculate() {
 async function createOrder() {
 
   const name =
-    document.getElementById("name").value.trim();
+    document.getElementById("name")
+      .value
+      .trim();
 
   const phone =
-    document.getElementById("phone").value.trim();
+    document.getElementById("phone")
+      .value
+      .trim();
 
   const amount =
     Number(
@@ -348,8 +533,14 @@ async function createOrder() {
   const message =
     document.getElementById("orderMessage");
 
+  const button =
+    document.getElementById(
+      "createOrderButton"
+    );
 
-  message.style.display = "block";
+
+  message.style.display =
+    "block";
 
 
   if (
@@ -369,6 +560,8 @@ async function createOrder() {
   }
 
 
+  button.disabled = true;
+
   message.innerText =
     "A criar o pedido...";
 
@@ -376,12 +569,13 @@ async function createOrder() {
   try {
 
     const response =
-      await fetch("/api/order", {
+      await fetch(API.order, {
 
         method: "POST",
 
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Accept": "application/json"
         },
 
         body: JSON.stringify({
@@ -396,10 +590,13 @@ async function createOrder() {
 
 
     const data =
-      await response.json();
+      await readJson(response);
 
 
-    if (!response.ok) {
+    if (
+      !response.ok ||
+      !data.order
+    ) {
 
       throw new Error(
         data.error ||
@@ -409,37 +606,37 @@ async function createOrder() {
     }
 
 
-    if (!data.order) {
-
-      throw new Error(
-        "Resposta inválida da API."
-      );
-    }
-
-
     const order =
       data.order;
 
 
     message.innerHTML =
+
       "<strong>" +
       "Pedido criado com sucesso!" +
       "</strong><br><br>" +
 
       "Número do pedido: <strong>" +
-      (order.order_id || order.id) +
+      escapeHtml(
+        order.order_id || order.id
+      ) +
       "</strong><br>" +
 
       "Operação: " +
+
       (
         operation === "buy"
           ? "Comprar USDT"
           : "Vender USDT"
       ) +
+
       "<br>" +
 
       "Pagamento: " +
-      payment.toUpperCase() +
+      escapeHtml(
+        payment.toUpperCase()
+      ) +
+
       "<br>" +
 
       "Valor: " +
@@ -447,34 +644,43 @@ async function createOrder() {
       " MZN<br>" +
 
       "USDT: " +
+
       Number(
         order.usdt_amount ||
         order.usdtAmount ||
         0
       ).toFixed(2) +
+
       "<br>" +
 
       "Estado: <strong>" +
-      order.status +
+
+      escapeHtml(
+        order.status || "pending"
+      ) +
+
       "</strong>";
 
   } catch (error) {
 
     console.error(
-      "USDTMZ API ERROR:",
+      "USDTMZ ORDER ERROR:",
       error
     );
-
 
     message.innerHTML =
       "<strong>" +
       "Não foi possível criar o pedido." +
       "</strong><br><br>" +
 
-      "Erro: " +
-      error.message;
-  }
+      escapeHtml(
+        error.message
+      );
 
+  } finally {
+
+    button.disabled = false;
+  }
 }
 
 
@@ -494,9 +700,27 @@ async function walletInfo() {
       "walletData"
     );
 
+  const transactionList =
+    document.getElementById(
+      "transactionList"
+    );
+
+  const button =
+    document.getElementById(
+      "walletButton"
+    );
+
 
   message.style.display =
     "block";
+
+  transactionList.classList.add(
+    "hidden"
+  );
+
+  transactionList.innerHTML = "";
+
+  button.disabled = true;
 
   message.innerHTML =
     "A consultar a carteira...";
@@ -504,103 +728,354 @@ async function walletInfo() {
 
   try {
 
-    const response =
-      await fetch("/api/wallet");
+    /* =========================
+       1. NEON / WALLET
+    ========================== */
+
+    const walletResponse =
+      await fetch(
+        API.wallet,
+        {
+          method: "GET",
+
+          headers: {
+            "Accept": "application/json"
+          },
+
+          cache: "no-store"
+        }
+      );
 
 
-    const data =
-      await response.json();
+    const walletResult =
+      await readJson(
+        walletResponse
+      );
 
 
     if (
-      !response.ok ||
-      !data.success
+      !walletResponse.ok ||
+      !walletResult.success
     ) {
 
       throw new Error(
-        data.error ||
+        walletResult.error ||
         "Não foi possível consultar a carteira."
       );
     }
 
 
-    if (!data.wallet) {
+    /* =========================
+       2. SEM CARTEIRA
+    ========================== */
+
+    if (
+      !walletResult.wallet
+    ) {
 
       walletData.innerHTML = `
+
         <div class="wallet-data">
-          <strong>Carteira de teste ainda não configurada.</strong>
+
+          <strong>
+            Carteira de teste ainda não configurada.
+          </strong>
+
           <br><br>
+
           A estrutura da carteira está pronta,
-          mas ainda não existe um endereço associado.
+          mas ainda não existe um endereço TRON
+          associado no banco de dados.
+
         </div>
+
       `;
 
       message.innerHTML =
-        "Consulta concluída.";
+        "Consulta concluída. Nenhuma carteira configurada.";
 
       return;
     }
 
 
     const wallet =
-      data.wallet;
+      walletResult.wallet;
+
+
+    const address =
+      String(
+        wallet.address || ""
+      ).trim();
+
+
+    /* =========================
+       3. SEM ENDEREÇO
+    ========================== */
+
+    if (!address) {
+
+      walletData.innerHTML = `
+
+        <div class="wallet-data">
+
+          <strong>
+            Carteira encontrada,
+            mas sem endereço TRON.
+          </strong>
+
+          <br><br>
+
+          Nenhum endereço foi inventado.
+
+        </div>
+
+      `;
+
+      message.innerHTML =
+        "Carteira encontrada, mas ainda não configurada.";
+
+      return;
+    }
+
+
+    /* =========================
+       4. VALIDAR ENDEREÇO
+    ========================== */
+
+    if (
+      !/^T[1-9A-HJ-NP-Za-km-z]{33}$/
+        .test(address)
+    ) {
+
+      throw new Error(
+        "O endereço TRON armazenado não é válido."
+      );
+    }
+
+
+    /* =========================
+       5. BLOCKCHAIN
+    ========================== */
+
+    message.innerHTML =
+      "Carteira encontrada. Consultando TRON Shasta...";
+
+
+    const blockchainResponse =
+      await fetch(
+
+        API.blockchain +
+        "?address=" +
+        encodeURIComponent(address),
+
+        {
+          method: "GET",
+
+          headers: {
+            "Accept": "application/json"
+          },
+
+          cache: "no-store"
+        }
+
+      );
+
+
+    const blockchainResult =
+      await readJson(
+        blockchainResponse
+      );
+
+
+    if (
+      !blockchainResponse.ok ||
+      !blockchainResult.success
+    ) {
+
+      throw new Error(
+        blockchainResult.error ||
+        "Não foi possível consultar a blockchain."
+      );
+    }
+
+
+    /* =========================
+       6. MOSTRAR CARTEIRA
+    ========================== */
+
+    const transactions =
+      Array.isArray(
+        blockchainResult.transactions
+      )
+        ? blockchainResult.transactions
+        : [];
 
 
     walletData.innerHTML = `
+
       <div class="wallet-data">
 
         <strong>Rede:</strong>
-        ${wallet.network || "Não definida"}
+
+        ${escapeHtml(
+          blockchainResult.network ||
+          "Shasta Testnet"
+        )}
 
         <br>
 
         <strong>Ativo:</strong>
-        ${wallet.asset || "Não definido"}
+
+        ${escapeHtml(
+          wallet.asset ||
+          "USDT"
+        )}
 
         <br>
 
-        <strong>Saldo:</strong>
-        ${wallet.balance || "0"} USDT
+        <strong>Endereço TRC20:</strong>
+
+        <span
+          style="word-break:break-all;"
+        >
+          ${escapeHtml(address)}
+        </span>
 
         <br>
 
-        <strong>Endereço:</strong>
-        ${wallet.address || "Não configurado"}
+        <strong>Transações TRC20:</strong>
+
+        ${transactions.length}
 
         <br>
 
         <strong>Estado:</strong>
-        ${wallet.status || "Não definido"}
+
+        ${escapeHtml(
+          wallet.status ||
+          "Teste"
+        )}
 
       </div>
+
     `;
 
 
+    /* =========================
+       7. LISTAR TRANSAÇÕES
+    ========================== */
+
+    if (
+      transactions.length > 0
+    ) {
+
+      transactionList.classList.remove(
+        "hidden"
+      );
+
+
+      transactionList.innerHTML =
+        "<strong>Transações recentes</strong>";
+
+
+      transactions
+        .slice(0, 10)
+        .forEach(
+          function(tx) {
+
+            const txid =
+              tx.transaction_id ||
+              tx.txID ||
+              "TxID indisponível";
+
+            const from =
+              tx.from ||
+              "Desconhecido";
+
+            const to =
+              tx.to ||
+              "Desconhecido";
+
+            const value =
+              tx.value ||
+              "0";
+
+
+            const item =
+              document.createElement(
+                "div"
+              );
+
+
+            item.className =
+              "tx";
+
+
+            item.innerHTML =
+
+              "<strong>TxID:</strong><br>" +
+
+              escapeHtml(txid) +
+
+              "<br><br>" +
+
+              "<strong>De:</strong><br>" +
+
+              escapeHtml(from) +
+
+              "<br><br>" +
+
+              "<strong>Para:</strong><br>" +
+
+              escapeHtml(to) +
+
+              "<br><br>" +
+
+              "<strong>Valor bruto:</strong><br>" +
+
+              escapeHtml(value);
+
+
+            transactionList.appendChild(
+              item
+            );
+          }
+        );
+    }
+
+
     message.innerHTML =
-      "<strong>Consulta concluída.</strong>";
+      "<strong>" +
+      "Blockchain consultada com sucesso." +
+      "</strong>";
 
 
   } catch (error) {
 
     console.error(
-      "USDTMZ WALLET ERROR:",
+      "USDTMZ BLOCKCHAIN ERROR:",
       error
     );
 
 
     message.innerHTML =
       "<strong>" +
-      "Não foi possível consultar a carteira." +
+      "Não foi possível consultar a blockchain." +
       "</strong><br><br>" +
 
-      error.message;
-  }
+      escapeHtml(
+        error.message
+      );
 
+  } finally {
+
+    button.disabled = false;
+  }
 }
 
 
 /* =========================
-   INICIAR
+   INICIALIZAÇÃO
 ========================= */
 
 calculate();
