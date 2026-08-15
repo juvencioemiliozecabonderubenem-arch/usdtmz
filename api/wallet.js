@@ -1,6 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 
 export default async function handler(req, res) {
+
   if (req.method !== "GET") {
     return res.status(405).json({
       success: false,
@@ -9,6 +10,7 @@ export default async function handler(req, res) {
   }
 
   try {
+
     if (!process.env.DATABASE_URL) {
       return res.status(500).json({
         success: false,
@@ -24,7 +26,6 @@ export default async function handler(req, res) {
         wallet_address,
         network,
         asset,
-        balance,
         status,
         created_at,
         updated_at
@@ -43,26 +44,55 @@ export default async function handler(req, res) {
 
     const wallet = wallets[0];
 
+    /*
+     * A API não inventa saldo.
+     *
+     * O saldo verdadeiro será consultado
+     * diretamente na blockchain através
+     * de /api/blockchain.
+     */
+
     return res.status(200).json({
+
       success: true,
+
       wallet: {
+
         id: wallet.id,
-        address: wallet.wallet_address,
-        network: wallet.network,
-        asset: wallet.asset,
-        balance: wallet.balance,
-        status: wallet.status,
-        created_at: wallet.created_at,
-        updated_at: wallet.updated_at
+
+        address:
+          wallet.wallet_address,
+
+        network:
+          "TRON Mainnet",
+
+        asset:
+          "USDT",
+
+        status:
+          "mainnet",
+
+        created_at:
+          wallet.created_at,
+
+        updated_at:
+          wallet.updated_at
+
       }
+
     });
 
   } catch (error) {
-    console.error("USDTMZ WALLET ERROR:", error);
+
+    console.error(
+      "USDTMZ WALLET ERROR:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      error: "Não foi possível consultar a carteira."
+      error:
+        "Não foi possível consultar a carteira."
     });
   }
 }
