@@ -12,8 +12,12 @@ async function walletInfo() {
   const button =
     document.getElementById("walletButton");
 
-  message.style.display = "block";
+  if (!message || !walletData || !walletStatus || !button) {
+    console.error("Elementos da carteira não encontrados.");
+    return;
+  }
 
+  message.style.display = "block";
   message.innerText =
     "A consultar a TRON Mainnet...";
 
@@ -31,49 +35,26 @@ async function walletInfo() {
       !response.ok ||
       !walletDataResponse.success
     ) {
-
       throw new Error(
         walletDataResponse.error ||
         "Não foi possível obter a carteira."
       );
-
     }
 
     const wallet =
       walletDataResponse.wallet;
 
-    if (!wallet) {
-
+    if (!wallet || !wallet.address) {
       throw new Error(
-        "Nenhuma carteira configurada."
+        "Nenhuma carteira Mainnet configurada."
       );
-
     }
-
-    /*
-     * O endereço e a rede vêm do servidor.
-     */
 
     const address =
       wallet.address;
 
-    if (!address) {
-
-      throw new Error(
-        "A carteira não possui endereço configurado."
-      );
-
-    }
-
-    /*
-     * Consulta diretamente a blockchain.
-     */
-
     const responseBlockchain =
-      await fetch(
-        "/api/blockchain?address=" +
-        encodeURIComponent(address)
-      );
+      await fetch("/api/blockchain");
 
     const blockchain =
       await responseBlockchain.json();
@@ -82,17 +63,11 @@ async function walletInfo() {
       !responseBlockchain.ok ||
       !blockchain.success
     ) {
-
       throw new Error(
         blockchain.error ||
         "A TRON Mainnet não respondeu."
       );
-
     }
-
-    /*
-     * Dados oficiais retornados pela blockchain.
-     */
 
     const network =
       blockchain.network ||
@@ -110,13 +85,9 @@ async function walletInfo() {
       blockchain.contract ||
       "Não informado";
 
-    /*
-     * Atualiza a interface.
-     */
-
     walletStatus.innerHTML =
       "<strong>Blockchain conectada</strong><br>" +
-      "Consulta realizada diretamente na TRON.";
+      "Consulta realizada diretamente na TRON Mainnet.";
 
     walletData.innerHTML = `
 
@@ -160,13 +131,9 @@ async function walletInfo() {
     `;
 
     message.innerHTML =
-      "<strong>" +
-      "Consulta concluída com sucesso." +
-      "</strong>";
+      "<strong>Consulta concluída com sucesso.</strong>";
 
-  }
-
-  catch (error) {
+  } catch (error) {
 
     console.error(
       "USDTMZ WALLET ERROR:",
@@ -180,23 +147,27 @@ async function walletInfo() {
       "<strong>Erro:</strong><br>" +
       error.message;
 
+  } finally {
+
+    button.disabled = false;
+
   }
-
-  finally {
-
-    f
-
-  button.disabled = false;
-
 }
 
-} function showWithdrawalForm() {
+
+/* =========================
+   ENVIO DE USDT
+   ========================= */
+
+function showWithdrawalForm() {
 
   const form =
     document.getElementById("withdrawalForm");
 
   if (!form) {
-    console.error("Formulário de envio não encontrado.");
+    console.error(
+      "Formulário de envio não encontrado."
+    );
     return;
   }
 
@@ -308,8 +279,7 @@ async function createWithdrawal() {
     }
 
     message.innerHTML =
-      "<strong>" +
-      "Solicitação criada com sucesso.</strong><br>" +
+      "<strong>Solicitação criada com sucesso.</strong><br>" +
       "ID: " +
       data.withdrawal.withdrawal_id +
       "<br>" +
