@@ -1,133 +1,98 @@
+<section id="walletSection" class="wallet-section">
+
+  <div class="wallet-card">
+
+    <h2>Carteira USDT</h2>
+
+    <div class="wallet-network">
+      <strong>TRON Mainnet</strong>
+      <span>USDT TRC-20</span>
+    </div>
+
+    <div id="walletStatus" class="wallet-status">
+      Integração blockchain preparada
+    </div>
+
+    <div class="wallet-item">
+      <strong>Consulta de saldo</strong>
+      <span id="walletBalance">
+        Aguardando conexão da carteira
+      </span>
+    </div>
+
+    <div class="wallet-item">
+      <strong>Endereço da carteira</strong>
+      <span id="walletAddress">
+        Aguardando configuração
+      </span>
+    </div>
+
+    <div class="wallet-item">
+      <strong>Verificação do contrato</strong>
+      <span id="walletContract">
+        USDT TRC-20 — aguardando verificação
+      </span>
+    </div>
+
+    <div class="wallet-item">
+      <strong>Monitoramento de transações</strong>
+      <span id="walletTransactions">
+        Sistema preparado — aguardando conexão
+      </span>
+    </div>
+
+    <button
+      type="button"
+      id="walletButton"
+      onclick="prepareWalletConnection()"
+    >
+      Consultar carteira
+    </button>
+
+    <div
+      id="walletMessage"
+      class="wallet-message"
+    ></div>
+
+  </div>
+
+</section>
 
 
-async function createWithdrawal() {
+<script>
 
-  const addressInput =
-    document.getElementById("withdrawalAddress");
+function prepareWalletConnection() {
 
-  const amountInput =
-    document.getElementById("withdrawalAmount");
-
-  const button =
-    document.getElementById("withdrawalButton");
+  const status =
+    document.getElementById("walletStatus");
 
   const message =
-    document.getElementById("withdrawalMessage");
+    document.getElementById("walletMessage");
 
-  if (
-    !addressInput ||
-    !amountInput ||
-    !button ||
-    !message
-  ) {
+  const button =
+    document.getElementById("walletButton");
+
+  if (!status || !message || !button) {
     console.error(
-      "Elementos de envio não encontrados."
+      "Elementos da carteira não encontrados."
     );
-    return;
-  }
-
-  const address =
-    addressInput.value.trim();
-
-  const amount =
-    amountInput.value.trim();
-
-  if (
-    !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)
-  ) {
-    message.innerText =
-      "Endereço TRON inválido.";
-    return;
-  }
-
-  const numericAmount =
-    Number(amount);
-
-  if (
-    !Number.isFinite(numericAmount) ||
-    numericAmount <= 0
-  ) {
-    message.innerText =
-      "Informe um valor USDT válido.";
-    return;
-  }
-
-  const confirmed =
-    window.confirm(
-      "Confirmar solicitação?\n\n" +
-      "Rede: TRON Mainnet\n" +
-      "Ativo: USDT TRC-20\n" +
-      "Valor: " +
-      numericAmount +
-      " USDT\n\n" +
-      "A solicitação ficará PENDING."
-    );
-
-  if (!confirmed) {
     return;
   }
 
   button.disabled = true;
 
-  message.innerText =
-    "A criar solicitação...";
+  status.innerText =
+    "Infraestrutura blockchain preparada.";
 
-  try {
+  message.innerHTML =
+    "<strong>Carteira ainda não conectada.</strong><br>" +
+    "A consulta real será ativada depois da configuração segura da TRON Mainnet.";
 
-    const response =
-      await fetch("/api/withdrawal", {
-
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json"
-        },
-
-        body: JSON.stringify({
-          destination_address: address,
-          amount: amount
-        })
-
-      });
-
-    const data =
-      await response.json();
-
-    if (
-      !response.ok ||
-      !data.success
-    ) {
-      throw new Error(
-        data.error ||
-        "Não foi possível criar a solicitação."
-      );
-    }
-
-    message.innerHTML =
-      "<strong>Solicitação criada com sucesso.</strong><br>" +
-      "ID: " +
-      data.withdrawal.withdrawal_id +
-      "<br>" +
-      "Estado: " +
-      data.withdrawal.status;
-
-    addressInput.value = "";
-    amountInput.value = "";
-
-  } catch (error) {
-
-    console.error(
-      "USDTMZ WITHDRAWAL ERROR:",
-      error
-    );
-
-    message.innerHTML =
-      "<strong>Erro:</strong><br>" +
-      error.message;
-
-  } finally {
+  setTimeout(function () {
 
     button.disabled = false;
 
-  }
+  }, 1000);
 }
+
+</script>
