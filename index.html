@@ -1,98 +1,1216 @@
-<section id="walletSection" class="wallet-section">
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
 
-  <div class="wallet-card">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
 
-    <h2>Carteira USDT</h2>
+  <meta
+    name="description"
+    content="USDTMZ - Plataforma de compra e venda de USDT"
+  >
 
-    <div class="wallet-network">
-      <strong>TRON Mainnet</strong>
-      <span>USDT TRC-20</span>
+  <title>USDTMZ - USDT / MZN</title>
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      color: #17202a;
+      line-height: 1.5;
+    }
+
+    header {
+      background: #111827;
+      color: white;
+      padding: 24px 16px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 30px;
+      margin-bottom: 5px;
+    }
+
+    header p {
+      opacity: 0.8;
+    }
+
+    main {
+      width: 100%;
+      max-width: 900px;
+      margin: auto;
+      padding: 20px 15px 50px;
+    }
+
+    section {
+      background: white;
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+    }
+
+    h2 {
+      margin-bottom: 18px;
+      font-size: 22px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 7px;
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      padding: 13px;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    input,
+    select {
+      border: 1px solid #d1d5db;
+      margin-bottom: 15px;
+      background: white;
+    }
+
+    button {
+      border: none;
+      background: #111827;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .converter-result {
+      margin-top: 15px;
+      padding: 15px;
+      background: #f3f4f6;
+      border-radius: 8px;
+    }
+
+    .result-value {
+      font-size: 25px;
+      font-weight: bold;
+      margin-top: 5px;
+    }
+
+    .rate {
+      margin-top: 10px;
+      color: #555;
+    }
+
+    .wallet-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 18px;
+    }
+
+    .wallet-network {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px;
+      background: #f3f4f6;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+
+    .wallet-status {
+      padding: 12px;
+      border-radius: 8px;
+      background: #f3f4f6;
+      margin-bottom: 15px;
+      font-weight: bold;
+    }
+
+    .wallet-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 14px 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    .wallet-item span {
+      text-align: right;
+      color: #555;
+      word-break: break-word;
+    }
+
+    .wallet-message {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #f3f4f6;
+      min-height: 20px;
+    }
+
+    .orders-message {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #f3f4f6;
+    }
+
+    .security-note {
+      margin-top: 15px;
+      padding: 14px;
+      background: #fff7ed;
+      border-radius: 8px;
+      color: #7c2d12;
+      font-size: 14px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 25px;
+      color: #666;
+      font-size: 14px;
+    }
+
+    @media (max-width: 600px) {
+
+      section {
+        padding: 17px;
+      }
+
+      .wallet-network,
+      .wallet-item {
+        flex-direction: column;
+      }
+
+      .wallet-item span {
+        text-align: left;
+      }
+
+    }
+
+  </style>
+</head>
+
+<body>
+
+<header>
+
+  <h1>USDTMZ</h1>
+
+  <p>
+    Compra e venda de USDT
+  </p>
+
+</header>
+
+
+<main>
+
+
+  <!-- =========================
+       CONVERSOR
+  ========================== -->
+
+  <section>
+
+    <h2>Conversor USDT / MZN</h2>
+
+    <label for="operation">
+      Operação
+    </label>
+
+    <select id="operation">
+
+      <option value="buy">
+        Comprar USDT
+      </option>
+
+      <option value="sell">
+        Vender USDT
+      </option>
+
+    </select>
+
+
+    <label for="mznAmount">
+      Valor em MZN
+    </label>
+
+    <input
+      id="mznAmount"
+      type="number"
+      min="0"
+      step="0.01"
+      placeholder="Ex.: 1000"
+    >
+
+
+    <div class="converter-result">
+
+      <strong>
+        Resultado
+      </strong>
+
+      <div
+        id="usdtResult"
+        class="result-value"
+      >
+        0.00 USDT
+      </div>
+
+      <div class="rate">
+        Taxa de referência:
+        <strong>
+          1 USDT = 64 MZN
+        </strong>
+      </div>
+
     </div>
 
-    <div id="walletStatus" class="wallet-status">
-      Integração blockchain preparada
+  </section>
+
+
+  <!-- =========================
+       PEDIDO
+  ========================== -->
+
+  <section>
+
+    <h2>
+      Fazer pedido
+    </h2>
+
+    <form id="orderForm">
+
+      <label for="name">
+        Nome
+      </label>
+
+      <input
+        id="name"
+        name="name"
+        type="text"
+        required
+        placeholder="Seu nome"
+      >
+
+
+      <label for="phone">
+        Telefone
+      </label>
+
+      <input
+        id="phone"
+        name="phone"
+        type="tel"
+        required
+        placeholder="M-Pesa/e-Mola"
+      >
+
+
+      <label for="payment">
+        Método de pagamento
+      </label>
+
+      <select
+        id="payment"
+        name="payment"
+        required
+      >
+
+        <option value="">
+          Selecione
+        </option>
+
+        <option value="mpesa">
+          M-Pesa
+        </option>
+
+        <option value="emola">
+          e-Mola
+        </option>
+
+      </select>
+
+
+      <label for="orderAmount">
+        Valor em MZN
+      </label>
+
+      <input
+        id="orderAmount"
+        name="amount"
+        type="number"
+        min="1"
+        step="0.01"
+        required
+        placeholder="Ex.: 1000"
+      >
+
+
+      <button
+        type="submit"
+        id="orderButton"
+      >
+        Criar pedido
+      </button>
+
+    </form>
+
+
+    <div
+      id="orderMessage"
+      class="orders-message"
+    ></div>
+
+  </section>
+
+
+  <!-- =========================
+       CARTEIRA
+  ========================== -->
+
+  <section id="walletSection">
+
+    <div class="wallet-card">
+
+      <h2>
+        Carteira USDT
+      </h2>
+
+
+      <div class="wallet-network">
+
+        <strong>
+          TRON Mainnet
+        </strong>
+
+        <span>
+          USDT TRC-20
+        </span>
+
+      </div>
+
+
+      <div
+        id="walletStatus"
+        class="wallet-status"
+      >
+        Infraestrutura blockchain preparada
+      </div>
+
+
+      <div class="wallet-item">
+
+        <strong>
+          Consulta de saldo
+        </strong>
+
+        <span id="walletBalance">
+          Aguardando conexão da carteira
+        </span>
+
+      </div>
+
+
+      <div class="wallet-item">
+
+        <strong>
+          Endereço da carteira
+        </strong>
+
+        <span id="walletAddress">
+          Aguardando configuração
+        </span>
+
+      </div>
+
+
+      <div class="wallet-item">
+
+        <strong>
+          Verificação do contrato
+        </strong>
+
+        <span id="walletContract">
+          USDT TRC-20 — preparado
+        </span>
+
+      </div>
+
+
+      <div class="wallet-item">
+
+        <strong>
+          Monitoramento de transações
+        </strong>
+
+        <span id="walletTransactions">
+          Sistema preparado
+        </span>
+
+      </div>
+
+
+      <button
+        type="button"
+        id="walletButton"
+      >
+        Consultar carteira
+      </button>
+
+
+      <div
+        id="walletMessage"
+        class="wallet-message"
+        aria-live="polite"
+      ></div>
+
+
+      <div class="security-note">
+
+        <strong>
+          Segurança:
+        </strong>
+
+        a carteira ainda não está conectada.
+        Nenhum saldo fictício será apresentado
+        e nenhuma transação será transmitida
+        nesta etapa.
+
+      </div>
+
     </div>
 
-    <div class="wallet-item">
-      <strong>Consulta de saldo</strong>
-      <span id="walletBalance">
-        Aguardando conexão da carteira
-      </span>
-    </div>
+  </section>
 
-    <div class="wallet-item">
-      <strong>Endereço da carteira</strong>
-      <span id="walletAddress">
-        Aguardando configuração
-      </span>
-    </div>
 
-    <div class="wallet-item">
-      <strong>Verificação do contrato</strong>
-      <span id="walletContract">
-        USDT TRC-20 — aguardando verificação
-      </span>
-    </div>
+  <!-- =========================
+       RETIRADA
+  ========================== -->
 
-    <div class="wallet-item">
-      <strong>Monitoramento de transações</strong>
-      <span id="walletTransactions">
-        Sistema preparado — aguardando conexão
-      </span>
-    </div>
+  <section>
+
+    <h2>
+      Retirada USDT
+    </h2>
+
+    <p style="margin-bottom:15px;">
+      A função de retirada está preparada para
+      integração futura com a infraestrutura
+      blockchain.
+    </p>
+
+    <label for="withdrawalAddress">
+      Endereço TRON
+    </label>
+
+    <input
+      id="withdrawalAddress"
+      type="text"
+      placeholder="Endereço TRON TRC-20"
+      autocomplete="off"
+    >
+
+
+    <label for="withdrawalAmount">
+      Valor USDT
+    </label>
+
+    <input
+      id="withdrawalAmount"
+      type="number"
+      min="0"
+      step="0.000001"
+      placeholder="Ex.: 10"
+    >
+
 
     <button
       type="button"
-      id="walletButton"
-      onclick="prepareWalletConnection()"
+      id="withdrawalButton"
     >
-      Consultar carteira
+      Solicitar retirada
     </button>
 
+
     <div
-      id="walletMessage"
-      class="wallet-message"
+      id="withdrawalMessage"
+      class="orders-message"
     ></div>
 
-  </div>
+  </section>
 
-</section>
+
+</main>
+
+
+<footer>
+
+  © 2026 USDTMZ
+
+</footer>
 
 
 <script>
 
-function prepareWalletConnection() {
+"use strict";
+
+
+/* =========================
+   CONFIGURAÇÃO
+========================= */
+
+const USDTMZ_CONFIG = {
+
+  rate: 64,
+
+  network: "TRON Mainnet",
+
+  token: "USDT",
+
+  standard: "TRC-20",
+
+  apiOrder: "/api/order",
+
+  apiWallet: "/api/wallet",
+
+  apiBlockchain: "/api/blockchain"
+
+};
+
+
+/* =========================
+   CONVERSOR
+========================= */
+
+function updateConverter() {
+
+  const input =
+    document.getElementById("mznAmount");
+
+  const result =
+    document.getElementById("usdtResult");
+
+  if (!input || !result) {
+    return;
+  }
+
+  const value =
+    Number(input.value);
+
+  if (!Number.isFinite(value) || value <= 0) {
+
+    result.textContent =
+      "0.00 USDT";
+
+    return;
+  }
+
+  const usdt =
+    value / USDTMZ_CONFIG.rate;
+
+  result.textContent =
+    usdt.toFixed(2) + " USDT";
+}
+
+
+document
+  .getElementById("mznAmount")
+  ?.addEventListener(
+    "input",
+    updateConverter
+  );
+
+
+/* =========================
+   CRIAR PEDIDO
+========================= */
+
+async function createOrder(event) {
+
+  event.preventDefault();
+
+  const form =
+    document.getElementById("orderForm");
+
+  const button =
+    document.getElementById("orderButton");
+
+  const message =
+    document.getElementById("orderMessage");
+
+  if (!form || !button || !message) {
+    return;
+  }
+
+  const name =
+    document
+      .getElementById("name")
+      .value
+      .trim();
+
+  const phone =
+    document
+      .getElementById("phone")
+      .value
+      .trim();
+
+  const payment =
+    document
+      .getElementById("payment")
+      .value;
+
+  const amount =
+    document
+      .getElementById("orderAmount")
+      .value
+      .trim();
+
+
+  if (!name || !phone || !payment || !amount) {
+
+    message.textContent =
+      "Preencha todos os campos.";
+
+    return;
+  }
+
+
+  const numericAmount =
+    Number(amount);
+
+
+  if (
+    !Number.isFinite(numericAmount) ||
+    numericAmount <= 0
+  ) {
+
+    message.textContent =
+      "Informe um valor válido.";
+
+    return;
+  }
+
+
+  button.disabled = true;
+
+  message.textContent =
+    "A criar pedido...";
+
+
+  try {
+
+    const response =
+      await fetch(
+        USDTMZ_CONFIG.apiOrder,
+        {
+
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json"
+          },
+
+          body: JSON.stringify({
+
+            name: name,
+
+            phone: phone,
+
+            operation:
+              document
+                .getElementById("operation")
+                .value,
+
+            payment: payment,
+
+            amount:
+              numericAmount
+
+          })
+
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if (
+      !response.ok ||
+      !data.success
+    ) {
+
+      throw new Error(
+        data.error ||
+        "Não foi possível criar o pedido."
+      );
+
+    }
+
+
+    const orderId =
+      data.order?.order_id ||
+      data.order_id ||
+      "gerado pelo servidor";
+
+
+    message.innerHTML =
+      "<strong>Pedido criado com sucesso.</strong><br>" +
+      "ID: " +
+      orderId;
+
+
+    form.reset();
+
+    updateConverter();
+
+
+  } catch (error) {
+
+    console.error(
+      "USDTMZ ORDER ERROR:",
+      error
+    );
+
+
+    message.innerHTML =
+      "<strong>Erro:</strong><br>" +
+      escapeHtml(error.message);
+
+  } finally {
+
+    button.disabled = false;
+
+  }
+
+}
+
+
+document
+  .getElementById("orderForm")
+  ?.addEventListener(
+    "submit",
+    createOrder
+  );
+
+
+/* =========================
+   CARTEIRA
+========================= */
+
+async function checkWallet() {
 
   const status =
     document.getElementById("walletStatus");
 
-  const message =
-    document.getElementById("walletMessage");
+  const balance =
+    document.getElementById("walletBalance");
+
+  const address =
+    document.getElementById("walletAddress");
+
+  const contract =
+    document.getElementById("walletContract");
+
+  const transactions =
+    document.getElementById("walletTransactions");
 
   const button =
     document.getElementById("walletButton");
 
-  if (!status || !message || !button) {
+  const message =
+    document.getElementById("walletMessage");
+
+
+  if (
+    !status ||
+    !balance ||
+    !address ||
+    !contract ||
+    !transactions ||
+    !button ||
+    !message
+  ) {
+
     console.error(
       "Elementos da carteira não encontrados."
     );
+
     return;
   }
 
+
   button.disabled = true;
 
-  status.innerText =
-    "Infraestrutura blockchain preparada.";
+  status.textContent =
+    "A verificar infraestrutura...";
 
-  message.innerHTML =
-    "<strong>Carteira ainda não conectada.</strong><br>" +
-    "A consulta real será ativada depois da configuração segura da TRON Mainnet.";
+  message.textContent =
+    "A consultar a configuração da carteira...";
 
-  setTimeout(function () {
+
+  try {
+
+    const response =
+      await fetch(
+        USDTMZ_CONFIG.apiWallet,
+        {
+          method: "GET",
+          cache: "no-store"
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if (
+      !response.ok ||
+      !data.success
+    ) {
+
+      throw new Error(
+        data.error ||
+        "Carteira ainda não configurada."
+      );
+
+    }
+
+
+    if (
+      !data.wallet ||
+      !data.wallet.address
+    ) {
+
+      throw new Error(
+        "Nenhuma carteira configurada."
+      );
+
+    }
+
+
+    address.textContent =
+      data.wallet.address;
+
+    status.textContent =
+      "Carteira configurada";
+
+
+    contract.textContent =
+      "USDT TRC-20";
+
+
+    message.textContent =
+      "Endereço da carteira encontrado. A consulta blockchain será realizada separadamente.";
+
+
+    /*
+      O saldo real NÃO é inventado aqui.
+      Ele só será apresentado quando
+      /api/blockchain estiver corretamente
+      configurada.
+    */
+
+    try {
+
+      const blockchainResponse =
+        await fetch(
+          USDTMZ_CONFIG.apiBlockchain,
+          {
+            method: "GET",
+            cache: "no-store"
+          }
+        );
+
+
+      const blockchain =
+        await blockchainResponse.json();
+
+
+      if (
+        blockchainResponse.ok &&
+        blockchain.success
+      ) {
+
+        balance.textContent =
+          String(
+            blockchain.balance ??
+            "0.000000"
+          ) +
+          " USDT";
+
+
+        transactions.textContent =
+          "Blockchain consultada";
+
+
+        if (blockchain.contract) {
+
+          contract.textContent =
+            blockchain.contract;
+
+        }
+
+
+        message.textContent =
+          "Consulta blockchain concluída.";
+
+      } else {
+
+        balance.textContent =
+          "Indisponível";
+
+
+        transactions.textContent =
+          "Aguardando consulta blockchain";
+
+      }
+
+
+    } catch (blockchainError) {
+
+      console.error(
+        "BLOCKCHAIN ERROR:",
+        blockchainError
+      );
+
+      balance.textContent =
+        "Indisponível";
+
+
+      transactions.textContent =
+        "Aguardando infraestrutura blockchain";
+
+    }
+
+
+  } catch (error) {
+
+    console.error(
+      "WALLET ERROR:",
+      error
+    );
+
+
+    status.textContent =
+      "Carteira ainda não conectada";
+
+
+    balance.textContent =
+      "Indisponível";
+
+
+    address.textContent =
+      "Aguardando configuração";
+
+
+    contract.textContent =
+      "USDT TRC-20 — aguardando verificação";
+
+
+    transactions.textContent =
+      "Sistema preparado";
+
+
+    message.innerHTML =
+      "<strong>Carteira ainda não conectada.</strong><br>" +
+      escapeHtml(error.message);
+
+  } finally {
 
     button.disabled = false;
 
-  }, 1000);
+  }
+
 }
 
+
+document
+  .getElementById("walletButton")
+  ?.addEventListener(
+    "click",
+    checkWallet
+  );
+
+
+/* =========================
+   RETIRADA
+========================= */
+
+function validateTronAddress(address) {
+
+  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/
+    .test(address);
+
+}
+
+
+async function requestWithdrawal() {
+
+  const addressInput =
+    document.getElementById(
+      "withdrawalAddress"
+    );
+
+  const amountInput =
+    document.getElementById(
+      "withdrawalAmount"
+    );
+
+  const button =
+    document.getElementById(
+      "withdrawalButton"
+    );
+
+  const message =
+    document.getElementById(
+      "withdrawalMessage"
+    );
+
+
+  if (
+    !addressInput ||
+    !amountInput ||
+    !button ||
+    !message
+  ) {
+
+    return;
+
+  }
+
+
+  const address =
+    addressInput.value.trim();
+
+  const amount =
+    Number(
+      amountInput.value
+    );
+
+
+  if (!validateTronAddress(address)) {
+
+    message.textContent =
+      "Endereço TRON inválido.";
+
+    return;
+
+  }
+
+
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0
+  ) {
+
+    message.textContent =
+      "Informe um valor USDT válido.";
+
+    return;
+
+  }
+
+
+  /*
+    Por segurança, nesta versão a retirada
+    não transmite USDT real.
+  */
+
+  button.disabled = true;
+
+  message.textContent =
+    "A validar solicitação...";
+
+
+  try {
+
+    await new Promise(
+      resolve =>
+        setTimeout(resolve, 700)
+    );
+
+
+    message.innerHTML =
+      "<strong>Solicitação preparada.</strong><br>" +
+      "Rede: TRON Mainnet<br>" +
+      "Ativo: USDT TRC-20<br>" +
+      "Valor: " +
+      amount.toFixed(6) +
+      " USDT<br><br>" +
+      "A transmissão real está desativada nesta versão.";
+
+
+  } catch (error) {
+
+    console.error(
+      "WITHDRAWAL ERROR:",
+      error
+    );
+
+
+    message.textContent =
+      "Não foi possível preparar a solicitação.";
+
+  } finally {
+
+    button.disabled = false;
+
+  }
+
+}
+
+
+document
+  .getElementById("withdrawalButton")
+  ?.addEventListener(
+    "click",
+    requestWithdrawal
+  );
+
+
+/* =========================
+   SEGURANÇA
+========================= */
+
+function escapeHtml(value) {
+
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
+}
+
+
 </script>
+
+</body>
+</html>
