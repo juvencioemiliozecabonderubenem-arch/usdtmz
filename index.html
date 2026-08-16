@@ -184,8 +184,155 @@ async function walletInfo() {
 
   finally {
 
+    f
+
+  button.disabled = false;
+
+}
+
+} function showWithdrawalForm() {
+
+  const form =
+    document.getElementById("withdrawalForm");
+
+  if (!form) {
+    console.error("Formulário de envio não encontrado.");
+    return;
+  }
+
+  form.style.display = "block";
+}
+
+
+async function createWithdrawal() {
+
+  const addressInput =
+    document.getElementById("withdrawalAddress");
+
+  const amountInput =
+    document.getElementById("withdrawalAmount");
+
+  const button =
+    document.getElementById("withdrawalButton");
+
+  const message =
+    document.getElementById("withdrawalMessage");
+
+  if (
+    !addressInput ||
+    !amountInput ||
+    !button ||
+    !message
+  ) {
+    console.error(
+      "Elementos de envio não encontrados."
+    );
+    return;
+  }
+
+  const address =
+    addressInput.value.trim();
+
+  const amount =
+    amountInput.value.trim();
+
+  if (
+    !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)
+  ) {
+    message.innerText =
+      "Endereço TRON inválido.";
+    return;
+  }
+
+  const numericAmount =
+    Number(amount);
+
+  if (
+    !Number.isFinite(numericAmount) ||
+    numericAmount <= 0
+  ) {
+    message.innerText =
+      "Informe um valor USDT válido.";
+    return;
+  }
+
+  const confirmed =
+    window.confirm(
+      "Confirmar solicitação?\n\n" +
+      "Rede: TRON Mainnet\n" +
+      "Ativo: USDT TRC-20\n" +
+      "Valor: " +
+      numericAmount +
+      " USDT\n\n" +
+      "A solicitação ficará PENDING."
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  button.disabled = true;
+
+  message.innerText =
+    "A criar solicitação...";
+
+  try {
+
+    const response =
+      await fetch("/api/withdrawal", {
+
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          destination_address: address,
+          amount: amount
+        })
+
+      });
+
+    const data =
+      await response.json();
+
+    if (
+      !response.ok ||
+      !data.success
+    ) {
+      throw new Error(
+        data.error ||
+        "Não foi possível criar a solicitação."
+      );
+    }
+
+    message.innerHTML =
+      "<strong>" +
+      "Solicitação criada com sucesso.</strong><br>" +
+      "ID: " +
+      data.withdrawal.withdrawal_id +
+      "<br>" +
+      "Estado: " +
+      data.withdrawal.status;
+
+    addressInput.value = "";
+    amountInput.value = "";
+
+  } catch (error) {
+
+    console.error(
+      "USDTMZ WITHDRAWAL ERROR:",
+      error
+    );
+
+    message.innerHTML =
+      "<strong>Erro:</strong><br>" +
+      error.message;
+
+  } finally {
+
     button.disabled = false;
 
   }
-
 }
