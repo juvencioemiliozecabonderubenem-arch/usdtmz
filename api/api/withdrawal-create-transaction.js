@@ -1,7 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 
 const USDT_CONTRACT =
-  "TR7NHqjeKQ8GZJ6YxZ9k2w3s4v5u6t7r8";
+  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
