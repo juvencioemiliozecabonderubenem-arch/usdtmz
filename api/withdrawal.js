@@ -1,5 +1,8 @@
 import { neon } from "@neondatabase/serverless";
 
+const MAX_WITHDRAWAL_USDT = 1000000;
+const USDT_DECIMALS = 6;
+
 function isValidTronAddress(address) {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
 }
@@ -14,8 +17,17 @@ function generateWithdrawalId() {
   return `USDTMZ-WD-${random}`;
 }
 
-export default async function handler(req, res) {
+function isValidUsdtAmount(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return false;
+  }
 
+  return Number.isInteger(
+    value * 10 ** USDT_DECIMALS
+  );
+}
+
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({
       success: false,
@@ -24,7 +36,6 @@ export default async function handler(req, res) {
   }
 
   try {
-
     if (!process.env.DATABASE_URL) {
       return res.status(500).json({
         success: false,
@@ -32,8 +43,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const sql =
-      neon(process.env.DATABASE_URL);
+    const sql = neon(process.env.DATABASE_URL);
 
     const {
       destination_address,
@@ -44,7 +54,7 @@ export default async function handler(req, res) {
       String(destination_address || "").trim();
 
     const value =
-      String(amount || "").trim();
+      String(amount ?? "").trim();
 
     if (!address) {
       return res.status(400).json({
@@ -67,23 +77,21 @@ export default async function handler(req, res) {
       });
     }
 
-    const amountNumber =
-      Number(value);
+    const amountNumber = Number(value);
 
-    if (
-      !Number.isFinite(amountNumber) ||
-      amountNumber <= 0
-    ) {
+    if (!isValidUsdtAmount(amountNumber)) {
       return res.status(400).json({
         success: false,
-        error: "Valor USDT inválido."
+        error:
+          "Valor USDT inválido. Use um valor maior que zero com no máximo 6 casas decimais."
       });
     }
 
-    if (amountNumber > 1000000000) {
+    if (amountNumber > MAX_WITHDRAWAL_USDT) {
       return res.status(400).json({
         success: false,
-        error: "Valor USDT demasiado elevado."
+        error:
+          "O valor máximo por retirada é 1.000.000 USDT."
       });
     }
 
@@ -121,12 +129,11 @@ export default async function handler(req, res) {
     return res.status(201).json({
       success: true,
       message:
-        "Solicitação de envio criada.",
+        "Solicitação de retirada criada com sucesso.",
       withdrawal: result[0]
     });
 
   } catch (error) {
-
     console.error(
       "USDTMZ WITHDRAWAL ERROR:",
       error
@@ -135,7 +142,8 @@ export default async function handler(req, res) {
     return res.status(500).json({
       success: false,
       error:
-        "Não foi possível criar a solicitação de envio."
+        "Não foi possível criar a solicitação de retirada."
     });
   }
 }
+:::
