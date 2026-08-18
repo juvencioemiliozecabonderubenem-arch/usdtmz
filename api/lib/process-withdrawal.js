@@ -1,8 +1,8 @@
 import { neon } from "@neondatabase/serverless";
+
 import {
   processWithdrawal
-} from "./process-withdrawal.js";
-
+} from "../lib/process-withdrawal.js";
 const USDT_DECIMALS = 6;
 
 function isValidTronAddress(address) {
