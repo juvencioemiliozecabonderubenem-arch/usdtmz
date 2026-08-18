@@ -1,418 +1,672 @@
 import { neon } from "@neondatabase/serverless";
+import { TronWeb } from "tronweb";
 
-import {
-  processWithdrawal
-} from "../lib/process-withdrawal.js";
+const TRON_FULL_HOST = "https://api.trongrid.io";
+
+const USDT_CONTRACT =
+  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+
 const USDT_DECIMALS = 6;
+
+const MAX_WITHDRAWAL_USDT = 1000000;
+
+// 100 TRX em SUN como limite máximo de execução.
+// Não é um pagamento fixo; é o fee_limit máximo permitido.
+const FEE_LIMIT = 100_000_000;
+
 
 function isValidTronAddress(address) {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
 }
 
-function isValidUsdtAmount(value) {
 
-  const number =
-    Number(value);
+function parseUsdtAmount(value) {
 
-  if (
-    !Number.isFinite(number) ||
-    number <= 0
-  ) {
-    return false;
+  const text =
+    String(value ?? "").trim();
+
+  if (!/^\d+(\.\d{1,6})?$/.test(text)) {
+    return null;
   }
 
-  return Number.isInteger(
-    number * 10 ** USDT_DECIMALS
+  const parts =
+    text.split(".");
+
+  const whole =
+    parts[0];
+
+  const decimal =
+    parts[1] || "";
+
+  const padded =
+    decimal.padEnd(
+      USDT_DECIMALS,
+      "0"
+    );
+
+  return (
+    BigInt(whole) * 1_000_000n +
+    BigInt(padded)
   );
 }
 
-function generateWithdrawalId() {
 
-  const random =
-    Math.random()
-      .toString(36)
-      .substring(2, 10)
-      .toUpperCase();
+function formatUsdtAmount(raw) {
 
-  return `USDTMZ-WD-${random}`;
+  const value =
+    BigInt(raw);
+
+  const whole =
+    value / 1_000_000n;
+
+  const decimal =
+    (value % 1_000_000n)
+      .toString()
+      .padStart(6, "0");
+
+  return `${whole}.${decimal}`;
 }
 
-export default async function handler(req, res) {
 
-  if (req.method !== "POST") {
-    return res.status(405).json({
-      success: false,
-      error: "Método não permitido."
-    });
-  }
+export async function processWithdrawal(
+  withdrawalId
+) {
 
   /*
    * =========================
-   * AUTORIZAÇÃO
+   * DATABASE
    * =========================
    */
 
-  const expectedSecret =
-    String(
-      process.env.PAYMENT_CONFIRM_SECRET || ""
-    ).trim();
-
-  const receivedSecret =
-    String(
-      req.headers.authorization || ""
-    ).replace(/^Bearer\s+/i, "")
-      .trim();
-
-  if (
-    !expectedSecret ||
-    receivedSecret !== expectedSecret
-  ) {
-    return res.status(401).json({
-      success: false,
-      error: "Não autorizado."
-    });
+  if (!process.env.DATABASE_URL) {
+    throw new Error(
+      "DATABASE_URL não configurada."
+    );
   }
 
-  try {
+  const sql =
+    neon(
+      process.env.DATABASE_URL
+    );
 
-    if (!process.env.DATABASE_URL) {
-      return res.status(500).json({
-        success: false,
-        error:
-          "DATABASE_URL não configurada."
-      });
-    }
 
-    const {
-      order_id,
-      payment_transaction_id,
-      destination_address
-    } = req.body || {};
+  /*
+   * =========================
+   * BUSCAR WITHDRAWAL
+   * =========================
+   */
 
-    const orderId =
-      String(order_id || "").trim();
-
-    const paymentTransactionId =
-      String(
-        payment_transaction_id || ""
-      ).trim();
-
-    const destination =
-      String(
-        destination_address || ""
-      ).trim();
-
-    /*
-     * =========================
-     * VALIDAÇÃO
-     * =========================
-     */
-
-    if (!orderId) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "Informe o order_id."
-      });
-    }
-
-    if (!paymentTransactionId) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "Informe o ID da transação do pagamento."
-      });
-    }
-
-    if (!isValidTronAddress(destination)) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "Endereço TRON de destino inválido."
-      });
-    }
-
-    const sql =
-      neon(process.env.DATABASE_URL);
-
-    /*
-     * =========================
-     * PEDIDO
-     * =========================
-     */
-
-    const orders = await sql`
+  const withdrawals =
+    await sql`
       SELECT
         id,
+        withdrawal_id,
         order_id,
-        name,
-        phone,
-        operation,
-        payment,
+        destination_address,
+        asset,
+        network,
         amount,
-        usdt_amount,
-        rate,
         status,
-        mpesa_transaction_id,
-        blockchain_tx_hash,
-        wallet_address
-      FROM orders
-      WHERE order_id = ${orderId}
+        tx_hash
+      FROM withdrawals
+      WHERE withdrawal_id =
+        ${withdrawalId}
       LIMIT 1
     `;
 
-    if (orders.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error:
-          "Pedido não encontrado."
-      });
-    }
 
-    const order =
-      orders[0];
+  if (withdrawals.length === 0) {
+
+    throw new Error(
+      "Withdrawal não encontrado."
+    );
+
+  }
+
+
+  const withdrawal =
+    withdrawals[0];
+
+
+  /*
+   * =========================
+   * EVITAR DUPLICAÇÃO
+   * =========================
+   */
+
+  if (
+    withdrawal.status === "SENT" ||
+    withdrawal.status === "CONFIRMED"
+  ) {
+
+    return {
+      alreadyProcessed: true,
+      withdrawal
+    };
+
+  }
+
+
+  if (
+    withdrawal.status !== "PENDING"
+  ) {
+
+    throw new Error(
+      `Withdrawal está no estado ${withdrawal.status}.`
+    );
+
+  }
+
+
+  /*
+   * =========================
+   * ASSET
+   * =========================
+   */
+
+  if (
+    String(
+      withdrawal.asset
+    ).toUpperCase() !== "USDT"
+  ) {
+
+    throw new Error(
+      "O asset do withdrawal não é USDT."
+    );
+
+  }
+
+
+  /*
+   * =========================
+   * NETWORK
+   * =========================
+   */
+
+  if (
+    String(
+      withdrawal.network
+    ).toLowerCase() !==
+    "tron mainnet"
+  ) {
+
+    throw new Error(
+      "A rede do withdrawal não é TRON Mainnet."
+    );
+
+  }
+
+
+  /*
+   * =========================
+   * DESTINO
+   * =========================
+   */
+
+  const destination =
+    String(
+      withdrawal.destination_address ||
+      ""
+    ).trim();
+
+
+  if (
+    !isValidTronAddress(
+      destination
+    )
+  ) {
+
+    throw new Error(
+      "Endereço TRON de destino inválido."
+    );
+
+  }
+
+
+  /*
+   * =========================
+   * VALOR
+   * =========================
+   */
+
+  const rawAmount =
+    parseUsdtAmount(
+      withdrawal.amount
+    );
+
+
+  if (
+    rawAmount === null ||
+    rawAmount <= 0n
+  ) {
+
+    throw new Error(
+      "Valor USDT inválido."
+    );
+
+  }
+
+
+  const maxRaw =
+    BigInt(
+      MAX_WITHDRAWAL_USDT
+    ) *
+    1_000_000n;
+
+
+  if (
+    rawAmount > maxRaw
+  ) {
+
+    throw new Error(
+      "Valor excede o limite máximo permitido."
+    );
+
+  }
+
+
+  /*
+   * =========================
+   * CHAVE PRIVADA
+   * =========================
+   */
+
+  const privateKey =
+    String(
+      process.env.TRON_PRIVATE_KEY ||
+      ""
+    ).trim();
+
+
+  if (!privateKey) {
+
+    throw new Error(
+      "TRON_PRIVATE_KEY não configurada."
+    );
+
+  }
+
+
+  /*
+   * =========================
+   * TRONWEB
+   * =========================
+   */
+
+  const tronWeb =
+    new TronWeb({
+      fullHost:
+        TRON_FULL_HOST,
+      privateKey
+    });
+
+
+  /*
+   * =========================
+   * ENDEREÇO DA CHAVE
+   * =========================
+   */
+
+  const senderAddress =
+    tronWeb.defaultAddress.base58;
+
+
+  if (
+    !isValidTronAddress(
+      senderAddress
+    )
+  ) {
+
+    throw new Error(
+      "A carteira da chave privada é inválida."
+    );
+
+  }
+
+
+  /*
+   * =========================
+   * CARTEIRA PRINCIPAL
+   * =========================
+   */
+
+  const wallets =
+    await sql`
+      SELECT
+        id,
+        wallet_address
+      FROM wallets
+      WHERE network =
+        'TRON Mainnet'
+        AND asset = 'USDT'
+        AND status = 'mainnet'
+      ORDER BY id DESC
+      LIMIT 1
+    `;
+
+
+  if (wallets.length === 0) {
+
+    throw new Error(
+      "Nenhuma carteira TRON Mainnet configurada."
+    );
+
+  }
+
+
+  const configuredWallet =
+    String(
+      wallets[0].wallet_address ||
+      ""
+    ).trim();
+
+
+  if (
+    configuredWallet.toLowerCase() !==
+    senderAddress.toLowerCase()
+  ) {
+
+    throw new Error(
+      "A TRON_PRIVATE_KEY não corresponde à carteira principal configurada."
+    );
+
+  }
+
+
+  /*
+   * =========================
+   * BLOQUEAR WITHDRAWAL
+   * =========================
+   */
+
+  const locked =
+    await sql`
+      UPDATE withdrawals
+      SET
+        status = 'PROCESSING',
+        updated_at = NOW()
+      WHERE withdrawal_id =
+        ${withdrawalId}
+        AND status = 'PENDING'
+      RETURNING *
+    `;
+
+
+  if (locked.length === 0) {
+
+    throw new Error(
+      "O withdrawal já está sendo processado."
+    );
+
+  }
+
+
+  try {
 
     /*
-     * Somente compra gera envio
-     * de USDT ao cliente.
-     */
-
-    if (order.operation !== "buy") {
-      return res.status(400).json({
-        success: false,
-        error:
-          "Este pedido não é uma compra de USDT."
-      });
-    }
-
-    /*
      * =========================
-     * IMPEDIR DUPLICAÇÃO
+     * CONTRATO USDT
      * =========================
      */
 
-    if (
-      order.status === "PAID" ||
-      order.status === "PROCESSING" ||
-      order.status === "COMPLETED"
-    ) {
-      return res.status(409).json({
-        success: false,
-        error:
-          "Este pedido já foi processado.",
-        order
-      });
-    }
-
-    /*
-     * =========================
-     * VALIDAR USDT
-     * =========================
-     */
-
-    if (
-      !isValidUsdtAmount(
-        order.usdt_amount
-      )
-    ) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "Quantidade de USDT inválida."
-      });
-    }
-
-    /*
-     * =========================
-     * PAGAMENTO ÚNICO
-     * =========================
-     */
-
-    const existingPayment =
-      await sql`
-        SELECT
-          order_id,
-          status
-        FROM orders
-        WHERE mpesa_transaction_id =
-          ${paymentTransactionId}
-        LIMIT 1
-      `;
-
-    if (
-      existingPayment.length > 0 &&
-      existingPayment[0].order_id !== orderId
-    ) {
-      return res.status(409).json({
-        success: false,
-        error:
-          "Esta transação de pagamento já foi utilizada."
-      });
-    }
-
-    /*
-     * =========================
-     * CRIAR WITHDRAWAL
-     * =========================
-     */
-
-    const withdrawalId =
-      generateWithdrawalId();
-
-    /*
-     * Atualizar pedido.
-     */
-
-    const updatedOrders =
-      await sql`
-        UPDATE orders
-        SET
-          status = 'PAID',
-          mpesa_transaction_id =
-            ${paymentTransactionId},
-          wallet_address =
-            ${destination},
-          updated_at = NOW()
-        WHERE order_id = ${orderId}
-          AND status = 'PENDING'
-        RETURNING
-          order_id,
-          status,
-          usdt_amount,
-          wallet_address,
-          updated_at
-      `;
-
-    if (updatedOrders.length === 0) {
-      return res.status(409).json({
-        success: false,
-        error:
-          "O pedido já foi alterado."
-      });
-    }
-
-    /*
-     * Criar withdrawal.
-     */
-
-    const withdrawals =
-      await sql`
-        INSERT INTO withdrawals (
-          withdrawal_id,
-          order_id,
-          destination_address,
-          asset,
-          network,
-          amount,
-          status
-        )
-        VALUES (
-          ${withdrawalId},
-          ${orderId},
-          ${destination},
-          'USDT',
-          'TRON Mainnet',
-          ${order.usdt_amount},
-          'PENDING'
-        )
-        RETURNING
-          withdrawal_id,
-          order_id,
-          destination_address,
-          asset,
-          network,
-          amount,
-          status,
-          created_at
-      `;
-
-    /*
-     * =========================
-     * PROCESSAR AUTOMATICAMENTE
-     * =========================
-     */
-
-    let withdrawalResult;
-
-    try {
-
-      withdrawalResult =
-        await processWithdrawal(
-          withdrawalId
+    const contract =
+      await tronWeb
+        .contract()
+        .at(
+          USDT_CONTRACT
         );
 
-    } catch (withdrawalError) {
 
-      console.error(
-        "USDTMZ AUTO WITHDRAWAL ERROR:",
-        withdrawalError
+    /*
+     * =========================
+     * SALDO USDT
+     * =========================
+     */
+
+    const balanceRaw =
+      await contract
+        .balanceOf(
+          senderAddress
+        )
+        .call();
+
+
+    const balance =
+      BigInt(
+        String(balanceRaw)
       );
 
-      /*
-       * O pagamento continua registrado,
-       * mas o envio falhou.
-       */
+
+    if (
+      balance < rawAmount
+    ) {
+
+      throw new Error(
+        `Saldo USDT insuficiente. Saldo atual: ${formatUsdtAmount(balance)} USDT. Necessário: ${formatUsdtAmount(rawAmount)} USDT.`
+      );
+
+    }
+
+
+    /*
+     * =========================
+     * SALDO TRX
+     * =========================
+     */
+
+    const trxBalance =
+      await tronWeb.trx.getBalance(
+        senderAddress
+      );
+
+
+    if (
+      BigInt(
+        String(trxBalance)
+      ) <= 0n
+    ) {
+
+      throw new Error(
+        "A carteira não possui TRX para executar a transação."
+      );
+
+    }
+
+
+    /*
+     * =========================
+     * CONSTRUIR TRANSFERÊNCIA
+     * =========================
+     */
+
+    const transaction =
+      await tronWeb.transactionBuilder
+        .triggerSmartContract(
+          USDT_CONTRACT,
+          "transfer(address,uint256)",
+          {
+            feeLimit:
+              FEE_LIMIT,
+            callValue: 0
+          },
+          [
+            {
+              type: "address",
+              value:
+                destination
+            },
+            {
+              type: "uint256",
+              value:
+                rawAmount.toString()
+            }
+          ],
+          senderAddress
+        );
+
+
+    if (
+      !transaction ||
+      !transaction.transaction
+    ) {
+
+      throw new Error(
+        "Não foi possível construir a transação USDT."
+      );
+
+    }
+
+
+    /*
+     * =========================
+     * ASSINAR
+     * =========================
+     */
+
+    const signed =
+      await tronWeb.trx.sign(
+        transaction.transaction,
+        privateKey
+      );
+
+
+    /*
+     * =========================
+     * TRANSMITIR
+     * =========================
+     */
+
+    const broadcast =
+      await tronWeb.trx.sendRawTransaction(
+        signed
+      );
+
+
+    if (
+      !broadcast ||
+      broadcast.result !== true
+    ) {
+
+      throw new Error(
+        `A TRON recusou a transação: ${JSON.stringify(broadcast)}`
+      );
+
+    }
+
+
+    const txHash =
+      broadcast.txid ||
+      signed.txID;
+
+
+    if (!txHash) {
+
+      throw new Error(
+        "Transação transmitida sem TXID."
+      );
+
+    }
+
+
+    /*
+     * =========================
+     * SALVAR TXID
+     * =========================
+     */
+
+    const updated =
+      await sql`
+        UPDATE withdrawals
+        SET
+          status = 'SENT',
+          tx_hash = ${txHash},
+          updated_at = NOW()
+        WHERE withdrawal_id =
+          ${withdrawalId}
+        RETURNING *
+      `;
+
+
+    /*
+     * =========================
+     * ATUALIZAR PEDIDO
+     * =========================
+     */
+
+    if (
+      withdrawal.order_id
+    ) {
 
       await sql`
         UPDATE orders
         SET
-          status = 'PAID',
-          updated_at = NOW()
-        WHERE order_id = ${orderId}
+          blockchain_tx_hash =
+            ${txHash},
+          wallet_address =
+            ${destination},
+          status =
+            'PROCESSING',
+          updated_at =
+            NOW()
+        WHERE order_id =
+          ${withdrawal.order_id}
       `;
 
-      return res.status(202).json({
-
-        success: true,
-
-        message:
-          "Pagamento confirmado, mas o envio de USDT não foi concluído.",
-
-        order:
-          updatedOrders[0],
-
-        withdrawal:
-          withdrawals[0],
-
-        withdrawal_error:
-          withdrawalError?.message ||
-          "Erro ao processar withdrawal."
-
-      });
     }
+
 
     /*
      * =========================
-     * RESPOSTA
+     * RESULTADO
      * =========================
      */
 
-    return res.status(201).json({
+    return {
 
-      success: true,
+      alreadyProcessed:
+        false,
 
-      message:
-        "Pagamento confirmado e USDT enviado para a rede TRON.",
+      txHash,
 
-      order:
-        updatedOrders[0],
+      amount:
+        formatUsdtAmount(
+          rawAmount
+        ),
+
+      from:
+        senderAddress,
+
+      to:
+        destination,
 
       withdrawal:
-        withdrawalResult
+        updated[0]
 
-    });
+    };
+
 
   } catch (error) {
 
-    console.error(
-      "USDTMZ CONFIRM PAYMENT ERROR:",
-      error
-    );
+    /*
+     * =========================
+     * MARCAR FALHA
+     * =========================
+     */
 
-    return res.status(500).json({
-      success: false,
-      error:
-        "Não foi possível confirmar o pagamento."
-    });
+    await sql`
+      UPDATE withdrawals
+      SET
+        status = 'FAILED',
+        updated_at = NOW()
+      WHERE withdrawal_id =
+        ${withdrawalId}
+        AND status =
+          'PROCESSING'
+    `;
+
+
+    throw error;
+
   }
+
 }
