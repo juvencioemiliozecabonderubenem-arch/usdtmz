@@ -1,4 +1,7 @@
 import { neon } from "@neondatabase/serverless";
+import {
+  processWithdrawal
+} from "./process-withdrawal.js";
 
 const USDT_DECIMALS = 6;
 
@@ -7,9 +10,14 @@ function isValidTronAddress(address) {
 }
 
 function isValidUsdtAmount(value) {
-  const number = Number(value);
 
-  if (!Number.isFinite(number) || number <= 0) {
+  const number =
+    Number(value);
+
+  if (
+    !Number.isFinite(number) ||
+    number <= 0
+  ) {
     return false;
   }
 
@@ -19,6 +27,7 @@ function isValidUsdtAmount(value) {
 }
 
 function generateWithdrawalId() {
+
   const random =
     Math.random()
       .toString(36)
@@ -37,12 +46,40 @@ export default async function handler(req, res) {
     });
   }
 
+  /*
+   * =========================
+   * AUTORIZAÇÃO
+   * =========================
+   */
+
+  const expectedSecret =
+    String(
+      process.env.PAYMENT_CONFIRM_SECRET || ""
+    ).trim();
+
+  const receivedSecret =
+    String(
+      req.headers.authorization || ""
+    ).replace(/^Bearer\s+/i, "")
+      .trim();
+
+  if (
+    !expectedSecret ||
+    receivedSecret !== expectedSecret
+  ) {
+    return res.status(401).json({
+      success: false,
+      error: "Não autorizado."
+    });
+  }
+
   try {
 
     if (!process.env.DATABASE_URL) {
       return res.status(500).json({
         success: false,
-        error: "DATABASE_URL não configurada."
+        error:
+          "DATABASE_URL não configurada."
       });
     }
 
@@ -65,17 +102,17 @@ export default async function handler(req, res) {
         destination_address || ""
       ).trim();
 
-
     /*
      * =========================
-     * VALIDAR DADOS
+     * VALIDAÇÃO
      * =========================
      */
 
     if (!orderId) {
       return res.status(400).json({
         success: false,
-        error: "Informe o order_id."
+        error:
+          "Informe o order_id."
       });
     }
 
@@ -87,30 +124,20 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!destination) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "Informe o endereço TRON de destino."
-      });
-    }
-
     if (!isValidTronAddress(destination)) {
       return res.status(400).json({
         success: false,
         error:
-          "Endereço TRON inválido."
+          "Endereço TRON de destino inválido."
       });
     }
-
 
     const sql =
       neon(process.env.DATABASE_URL);
 
-
     /*
      * =========================
-     * BUSCAR PEDIDO
+     * PEDIDO
      * =========================
      */
 
@@ -128,9 +155,7 @@ export default async function handler(req, res) {
         status,
         mpesa_transaction_id,
         blockchain_tx_hash,
-        wallet_address,
-        created_at,
-        updated_at
+        wallet_address
       FROM orders
       WHERE order_id = ${orderId}
       LIMIT 1
@@ -139,12 +164,26 @@ export default async function handler(req, res) {
     if (orders.length === 0) {
       return res.status(404).json({
         success: false,
-        error: "Pedido não encontrado."
+        error:
+          "Pedido não encontrado."
       });
     }
 
-    const order = orders[0];
+    const order =
+      orders[0];
 
+    /*
+     * Somente compra gera envio
+     * de USDT ao cliente.
+     */
+
+    if (order.operation !== "buy") {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Este pedido não é uma compra de USDT."
+      });
+    }
 
     /*
      * =========================
@@ -157,33 +196,13 @@ export default async function handler(req, res) {
       order.status === "PROCESSING" ||
       order.status === "COMPLETED"
     ) {
-
       return res.status(409).json({
         success: false,
         error:
           "Este pedido já foi processado.",
         order
       });
-
     }
-
-
-    /*
-     * =========================
-     * VALIDAR OPERAÇÃO
-     * =========================
-     */
-
-    if (order.operation !== "buy") {
-
-      return res.status(400).json({
-        success: false,
-        error:
-          "Somente pedidos de compra podem gerar envio automático de USDT."
-      });
-
-    }
-
 
     /*
      * =========================
@@ -196,23 +215,17 @@ export default async function handler(req, res) {
         order.usdt_amount
       )
     ) {
-
       return res.status(400).json({
         success: false,
         error:
-          "Quantidade de USDT do pedido inválida."
+          "Quantidade de USDT inválida."
       });
-
     }
-
 
     /*
      * =========================
-     * VERIFICAR TRANSAÇÃO
+     * PAGAMENTO ÚNICO
      * =========================
-     *
-     * Evita reutilizar o mesmo ID
-     * de pagamento em outro pedido.
      */
 
     const existingPayment =
@@ -230,15 +243,12 @@ export default async function handler(req, res) {
       existingPayment.length > 0 &&
       existingPayment[0].order_id !== orderId
     ) {
-
       return res.status(409).json({
         success: false,
         error:
-          "Esta transação de pagamento já está associada a outro pedido."
+          "Esta transação de pagamento já foi utilizada."
       });
-
     }
-
 
     /*
      * =========================
@@ -249,9 +259,8 @@ export default async function handler(req, res) {
     const withdrawalId =
       generateWithdrawalId();
 
-
     /*
-     * Atualização do pedido
+     * Atualizar pedido.
      */
 
     const updatedOrders =
@@ -275,18 +284,15 @@ export default async function handler(req, res) {
       `;
 
     if (updatedOrders.length === 0) {
-
       return res.status(409).json({
         success: false,
         error:
-          "O pedido não está mais disponível para confirmação."
+          "O pedido já foi alterado."
       });
-
     }
 
-
     /*
-     * Criar levantamento
+     * Criar withdrawal.
      */
 
     const withdrawals =
@@ -320,6 +326,60 @@ export default async function handler(req, res) {
           created_at
       `;
 
+    /*
+     * =========================
+     * PROCESSAR AUTOMATICAMENTE
+     * =========================
+     */
+
+    let withdrawalResult;
+
+    try {
+
+      withdrawalResult =
+        await processWithdrawal(
+          withdrawalId
+        );
+
+    } catch (withdrawalError) {
+
+      console.error(
+        "USDTMZ AUTO WITHDRAWAL ERROR:",
+        withdrawalError
+      );
+
+      /*
+       * O pagamento continua registrado,
+       * mas o envio falhou.
+       */
+
+      await sql`
+        UPDATE orders
+        SET
+          status = 'PAID',
+          updated_at = NOW()
+        WHERE order_id = ${orderId}
+      `;
+
+      return res.status(202).json({
+
+        success: true,
+
+        message:
+          "Pagamento confirmado, mas o envio de USDT não foi concluído.",
+
+        order:
+          updatedOrders[0],
+
+        withdrawal:
+          withdrawals[0],
+
+        withdrawal_error:
+          withdrawalError?.message ||
+          "Erro ao processar withdrawal."
+
+      });
+    }
 
     /*
      * =========================
@@ -332,13 +392,13 @@ export default async function handler(req, res) {
       success: true,
 
       message:
-        "Pagamento confirmado e withdrawal criado.",
+        "Pagamento confirmado e USDT enviado para a rede TRON.",
 
       order:
         updatedOrders[0],
 
       withdrawal:
-        withdrawals[0]
+        withdrawalResult
 
     });
 
@@ -354,7 +414,5 @@ export default async function handler(req, res) {
       error:
         "Não foi possível confirmar o pagamento."
     });
-
   }
-
 }
