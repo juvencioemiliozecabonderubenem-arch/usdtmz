@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ji<!DOCTYPE html>
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
@@ -1057,7 +1057,9 @@ document
     checkWallet
   );
 
-
+function validateTronAddress(address) {
+  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
+}
 async function requestWithdrawal() {
 
   const addressInput =
@@ -1131,7 +1133,12 @@ async function requestWithdrawal() {
       await fetch(
         "/api/withdrawal",
         {
-          method: "POST",
+          method: "POST",document
+  .getElementById("withdrawalButton")
+  ?.addEventListener(
+    "click",
+    requestWithdrawal
+  );
 
           headers: {
             "Content-Type": "application/json"
