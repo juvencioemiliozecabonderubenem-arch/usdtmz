@@ -1,7 +1,13 @@
 import { neon } from "@neondatabase/serverless";
 
-export default async function handler(req, res) {
+const USDT_CONTRACT =
+  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 
+function isValidTronAddress(address) {
+  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
+}
+
+export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({
       success: false,
@@ -10,7 +16,6 @@ export default async function handler(req, res) {
   }
 
   try {
-
     if (!process.env.DATABASE_URL) {
       return res.status(500).json({
         success: false,
@@ -18,11 +23,15 @@ export default async function handler(req, res) {
       });
     }
 
-    const sql =
-      neon(process.env.DATABASE_URL);
+    const sql = neon(process.env.DATABASE_URL);
 
     const wallets = await sql`
-      SELECT wallet_address
+      SELECT
+        id,
+        wallet_address,
+        network,
+        asset,
+        status
       FROM wallets
       WHERE network = 'TRON Mainnet'
         AND asset = 'USDT'
@@ -38,14 +47,12 @@ export default async function handler(req, res) {
       });
     }
 
-    const address =
-      String(
-        wallets[0].wallet_address || ""
-      ).trim();
+    const wallet = wallets[0];
 
-    if (
-      !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)
-    ) {
+    const address =
+      String(wallet.wallet_address || "").trim();
+
+    if (!isValidTronAddress(address)) {
       return res.status(400).json({
         success: false,
         error: "O endereço TRON configurado é inválido."
@@ -53,7 +60,6 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({
-
       success: true,
 
       wallet: {
@@ -61,14 +67,14 @@ export default async function handler(req, res) {
         network: "TRON Mainnet",
         asset: "USDT",
         standard: "TRC-20",
-        contract:
-          "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+        contract: USDT_CONTRACT,
+        configured: true,
+        blockchain: "TRON Mainnet",
+        balance_source: "TRONGrid"
       }
-
     });
 
   } catch (error) {
-
     console.error(
       "USDTMZ WALLET ERROR:",
       error
@@ -78,7 +84,5 @@ export default async function handler(req, res) {
       success: false,
       error: "Erro ao consultar a carteira."
     });
-
   }
-
 }
