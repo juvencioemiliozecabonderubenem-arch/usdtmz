@@ -1058,40 +1058,19 @@ document
   );
 
 
-/* =========================
-   RETIRADA
-========================= */
-
-function validateTronAddress(address) {
-
-  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/
-    .test(address);
-
-}
-
-
 async function requestWithdrawal() {
 
   const addressInput =
-    document.getElementById(
-      "withdrawalAddress"
-    );
+    document.getElementById("withdrawalAddress");
 
   const amountInput =
-    document.getElementById(
-      "withdrawalAmount"
-    );
+    document.getElementById("withdrawalAmount");
 
   const button =
-    document.getElementById(
-      "withdrawalButton"
-    );
+    document.getElementById("withdrawalButton");
 
   const message =
-    document.getElementById(
-      "withdrawalMessage"
-    );
-
+    document.getElementById("withdrawalMessage");
 
   if (
     !addressInput ||
@@ -1099,20 +1078,14 @@ async function requestWithdrawal() {
     !button ||
     !message
   ) {
-
     return;
-
   }
-
 
   const address =
     addressInput.value.trim();
 
   const amount =
-    Number(
-      amountInput.value
-    );
-
+    amountInput.value.trim();
 
   if (!validateTronAddress(address)) {
 
@@ -1120,51 +1093,95 @@ async function requestWithdrawal() {
       "Endereço TRON inválido.";
 
     return;
-
   }
 
+  const numericAmount =
+    Number(amount);
 
   if (
-    !Number.isFinite(amount) ||
-    amount <= 0
+    !Number.isFinite(numericAmount) ||
+    numericAmount <= 0
   ) {
 
     message.textContent =
       "Informe um valor USDT válido.";
 
     return;
-
   }
 
+  if (
+    numericAmount >
+    1000000
+  ) {
 
-  /*
-    Por segurança, nesta versão a retirada
-    não transmite USDT real.
-  */
+    message.textContent =
+      "O valor máximo por retirada é 1.000.000 USDT.";
+
+    return;
+  }
 
   button.disabled = true;
 
   message.textContent =
-    "A validar solicitação...";
-
+    "A criar solicitação de retirada...";
 
   try {
 
-    await new Promise(
-      resolve =>
-        setTimeout(resolve, 700)
-    );
+    const response =
+      await fetch(
+        "/api/withdrawal",
+        {
+          method: "POST",
 
+          headers: {
+            "Content-Type": "application/json"
+          },
+
+          body: JSON.stringify({
+            destination_address: address,
+            amount: amount
+          })
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (
+      !response.ok ||
+      !data.success
+    ) {
+
+      throw new Error(
+        data.error ||
+        "Não foi possível criar a retirada."
+      );
+    }
+
+    const withdrawal =
+      data.withdrawal || {};
 
     message.innerHTML =
-      "<strong>Solicitação preparada.</strong><br>" +
+      "<strong>Solicitação criada com sucesso.</strong><br>" +
+      "ID: " +
+      escapeHtml(
+        withdrawal.withdrawal_id || ""
+      ) +
+      "<br>" +
       "Rede: TRON Mainnet<br>" +
       "Ativo: USDT TRC-20<br>" +
       "Valor: " +
-      amount.toFixed(6) +
-      " USDT<br><br>" +
-      "A transmissão real está desativada nesta versão.";
+      escapeHtml(
+        String(withdrawal.amount ?? amount)
+      ) +
+      " USDT<br>" +
+      "Estado: " +
+      escapeHtml(
+        withdrawal.status || "PENDING"
+      );
 
+    addressInput.value = "";
+    amountInput.value = "";
 
   } catch (error) {
 
@@ -1173,26 +1190,15 @@ async function requestWithdrawal() {
       error
     );
 
-
-    message.textContent =
-      "Não foi possível preparar a solicitação.";
+    message.innerHTML =
+      "<strong>Erro:</strong><br>" +
+      escapeHtml(error.message);
 
   } finally {
 
     button.disabled = false;
-
   }
-
 }
-
-
-document
-  .getElementById("withdrawalButton")
-  ?.addEventListener(
-    "click",
-    requestWithdrawal
-  );
-
 
 /* =========================
    SEGURANÇA
