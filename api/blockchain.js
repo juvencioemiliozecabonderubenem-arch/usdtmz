@@ -13,7 +13,6 @@ function isValidTronAddress(address) {
 
 function formatUsdtBalance(rawBalance) {
   const raw = BigInt(String(rawBalance || "0"));
-
   const divisor = 1000000n;
 
   const whole = raw / divisor;
@@ -37,11 +36,9 @@ export default async function handler(req, res) {
 
   try {
 
-    /*
-     * =========================
-     * BANCO DE DADOS
-     * =========================
-     */
+    /* =========================
+       VARIÁVEIS OBRIGATÓRIAS
+    ========================= */
 
     if (!process.env.DATABASE_URL) {
       return res.status(500).json({
@@ -50,15 +47,23 @@ export default async function handler(req, res) {
       });
     }
 
+    if (!process.env.TRONGRID_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        error: "TRONGRID_API_KEY não configurada."
+      });
+    }
+
+    /* =========================
+       BANCO DE DADOS
+    ========================= */
+
     const sql =
       neon(process.env.DATABASE_URL);
 
-
-    /*
-     * =========================
-     * OBTER CARTEIRA MAINNET
-     * =========================
-     */
+    /* =========================
+       OBTER CARTEIRA MAINNET
+    ========================= */
 
     const wallets = await sql`
       SELECT wallet_address
@@ -70,65 +75,40 @@ export default async function handler(req, res) {
       LIMIT 1
     `;
 
-
     if (wallets.length === 0) {
-
       return res.status(404).json({
         success: false,
-        error: "Nenhuma carteira TRON Mainnet configurada."
+        error:
+          "Nenhuma carteira TRON Mainnet configurada."
       });
-
     }
 
-if (!process.env.TRONGRID_API_KEY) {
-
-  return res.status(500).json({
-    success: false,
-    error: "TRONGRID_API_KEY não configurada."
-  });
-
-
-headers["TRON-PRO-API-KEY"] =
-  process.env.TRONGRID_API_KEY;
     const address =
-      String(wallets[0].wallet_address || "").trim();
-
+      String(
+        wallets[0].wallet_address || ""
+      ).trim();
 
     if (!isValidTronAddress(address)) {
-
       return res.status(400).json({
         success: false,
-        error: "O endereço TRON configurado é inválido."
+        error:
+          "O endereço TRON configurado é inválido."
       });
-
     }
 
-
-    /*
-     * =========================
-     * CONSULTA REAL TRON
-     * =========================
-     */
+    /* =========================
+       CONSULTA TRON MAINNET
+    ========================= */
 
     const accountUrl =
       `${TRON_API}/v1/accounts/${address}` +
       `?only_confirmed=true`;
 
-
     const headers = {
-      "Accept": "application/json"
+      "Accept": "application/json",
+      "TRON-PRO-API-KEY":
+        process.env.TRONGRID_API_KEY
     };
-
-
-    /*
-     * Se existir API key no Vercel,
-     * ela é enviada para o TronGrid.
-     */
-
-    
-
-    }
-
 
     const response =
       await fetch(accountUrl, {
@@ -137,10 +117,8 @@ headers["TRON-PRO-API-KEY"] =
         cache: "no-store"
       });
 
-
     const data =
       await response.json();
-
 
     if (!response.ok) {
 
@@ -151,27 +129,21 @@ headers["TRON-PRO-API-KEY"] =
 
       return res.status(502).json({
         success: false,
-        error: "Não foi possível consultar a TRON Mainnet."
+        error:
+          "Não foi possível consultar a TRON Mainnet."
       });
-
     }
 
+    /* =========================
+       LOCALIZAR USDT TRC-20
+    ========================= */
 
-    /*
-     * =========================
-     * LOCALIZAR USDT TRC-20
-     * =========================
-     */
-
-    let balance =
-      "0.000000";
-
+    let balance = "0.000000";
 
     const account =
       Array.isArray(data.data)
         ? data.data[0]
         : null;
-
 
     if (
       account &&
@@ -180,39 +152,33 @@ headers["TRON-PRO-API-KEY"] =
 
       for (const token of account.trc20) {
 
-        if (!token || typeof token !== "object") {
+        if (
+          !token ||
+          typeof token !== "object"
+        ) {
           continue;
         }
-
-
-        /*
-         * O TronGrid normalmente devolve
-         * o contrato como chave do objeto.
-         */
 
         const rawBalance =
           token[USDT_CONTRACT];
 
-
-        if (rawBalance !== undefined) {
+        if (
+          rawBalance !== undefined
+        ) {
 
           balance =
-            formatUsdtBalance(rawBalance);
+            formatUsdtBalance(
+              rawBalance
+            );
 
           break;
-
         }
-
       }
-
     }
 
-
-    /*
-     * =========================
-     * RESPOSTA
-     * =========================
-     */
+    /* =========================
+       RESPOSTA
+    ========================= */
 
     return res.status(200).json({
 
@@ -239,9 +205,7 @@ headers["TRON-PRO-API-KEY"] =
 
       source:
         "TRON Mainnet / TronGrid"
-
     });
-
 
   } catch (error) {
 
@@ -250,16 +214,10 @@ headers["TRON-PRO-API-KEY"] =
       error
     );
 
-
     return res.status(500).json({
-
       success: false,
-
       error:
         "Erro interno ao consultar a blockchain."
-
     });
-
   }
-
 }
