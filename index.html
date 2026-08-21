@@ -717,23 +717,22 @@ async function requestWithdrawal() {
 
   try {
 
-    const response =
-      await fetch(
-        "/api/withdrawal",
-        {
-          
-  
+   const response =
+  await fetch(
+    "/api/withdrawal",
+    {
+      method: "POST",
 
-          headers: {
-            "Content-Type": "application/json"
-          },
+      headers: {
+        "Content-Type": "application/json"
+      },
 
-          body: JSON.stringify({
-            destination_address: address,
-            amount: amount
-          })
-        }
-      );
+      body: JSON.stringify({
+        destination_address: address,
+        amount: amount
+      })
+    }
+  );
 
     const data =
       await response.json();
