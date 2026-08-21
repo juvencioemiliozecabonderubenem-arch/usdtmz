@@ -87,7 +87,6 @@ if (!process.env.TRONGRID_API_KEY) {
     error: "TRONGRID_API_KEY não configurada."
   });
 
-}
 
 headers["TRON-PRO-API-KEY"] =
   process.env.TRONGRID_API_KEY;
