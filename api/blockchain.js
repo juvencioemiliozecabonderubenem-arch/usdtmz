@@ -80,7 +80,17 @@ export default async function handler(req, res) {
 
     }
 
+if (!process.env.TRONGRID_API_KEY) {
 
+  return res.status(500).json({
+    success: false,
+    error: "TRONGRID_API_KEY não configurada."
+  });
+
+}
+
+headers["TRON-PRO-API-KEY"] =
+  process.env.TRONGRID_API_KEY;
     const address =
       String(wallets[0].wallet_address || "").trim();
 
@@ -116,10 +126,7 @@ export default async function handler(req, res) {
      * ela é enviada para o TronGrid.
      */
 
-    if (process.env.TRONGRID_API_KEY) {
-
-      headers["TRON-PRO-API-KEY"] =
-        process.env.TRONGRID_API_KEY;
+    
 
     }
 
