@@ -82,10 +82,7 @@
           Segurança:
         </strong>
 
-        a carteira ainda não está conectada.
-        Nenhum saldo fictício será apresentado
-        e nenhuma transação será transmitida
-        nesta etapa.
+        
 
       </div>
 
@@ -752,24 +749,37 @@ async function requestWithdrawal() {
       data.withdrawal || {};
 
     message.innerHTML =
-      "<strong>Solicitação criada com sucesso.</strong><br>" +
-      "ID: " +
-      escapeHtml(
-        withdrawal.withdrawal_id || ""
-      ) +
-      "<br>" +
-      "Rede: TRON Mainnet<br>" +
-      "Ativo: USDT TRC-20<br>" +
-      "Valor: " +
-      escapeHtml(
-        String(withdrawal.amount ?? amount)
-      ) +
-      " USDT<br>" +
-      "Estado: " +
-      escapeHtml(
-        withdrawal.status || "PENDING"
-      );
+      const status =
+  String(withdrawal.status || "PENDING").toUpperCase();
 
+let statusText = "Pedido recebido";
+
+if (status === "PENDING") {
+  statusText = "Aguardando autorização";
+} else if (status === "AUTHORIZED") {
+  statusText = "Autorizado para processamento";
+} else if (status === "PROCESSING") {
+  statusText = "Em processamento";
+} else if (status === "SENT") {
+  statusText = "Enviado — TXID disponível";
+} else if (status === "CONFIRMED") {
+  statusText = "Confirmado na TRON";
+} else if (status === "FAILED") {
+  statusText = "Falhou";
+}
+
+message.innerHTML =
+  "<strong>Solicitação registada.</strong><br>" +
+  "ID: " +
+  escapeHtml(withdrawal.withdrawal_id || "") +
+  "<br>" +
+  "Rede: TRON Mainnet<br>" +
+  "Ativo: USDT TRC-20<br>" +
+  "Valor: " +
+  escapeHtml(String(withdrawal.amount ?? amount)) +
+  " USDT<br>" +
+  "Estado: " +
+  escapeHtml(statusText);
     addressInput.value = "";
     amountInput.value = "";
 
