@@ -71,6 +71,15 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
+    /*
+     * Log seguro para diagnóstico.
+     * Não mostra a API key.
+     */
+    console.log(
+      "TRON RESPONSE:",
+      JSON.stringify(data)
+    );
+
     if (!response.ok) {
       console.error(
         "TRONGRID BALANCE ERROR:",
@@ -90,21 +99,41 @@ export default async function handler(req, res) {
         ? data.data
         : [];
 
+    console.log(
+      "TRON TOKENS FOUND:",
+      items.length
+    );
+
     const token =
-      items.find((item) =>
-        String(
-          item?.token_id ||
-          item?.contract_address ||
-          ""
-        ).toLowerCase() ===
-        USDT_CONTRACT.toLowerCase()
-      ) || items[0];
+      items.find((item) => {
+        const contract =
+          String(
+            item?.token_id ||
+            item?.contract_address ||
+            ""
+          ).toLowerCase();
+
+        return (
+          contract ===
+          USDT_CONTRACT.toLowerCase()
+        );
+      }) || null;
+
+    console.log(
+      "USDT TOKEN FOUND:",
+      Boolean(token)
+    );
 
     const rawBalance =
       String(token?.balance || "0");
 
     const balance =
       formatUsdtBalance(rawBalance);
+
+    console.log(
+      "USDT BALANCE:",
+      balance
+    );
 
     return res.status(200).json({
       success: true,
