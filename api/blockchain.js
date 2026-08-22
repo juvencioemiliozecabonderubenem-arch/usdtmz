@@ -1,5 +1,3 @@
-import { neon } from "@neondatabase/serverless";
-
 const TRON_API = "https://api.trongrid.io";
 
 const USDT_CONTRACT =
@@ -7,26 +5,32 @@ const USDT_CONTRACT =
 
 const USDT_DECIMALS = 6;
 
+const WALLET_ADDRESS =
+  "TVSGrUA6foo527kWL5NiTFBmMX9F38F8A4";
+
 function isValidTronAddress(address) {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
 }
 
 function formatUsdtBalance(rawBalance) {
-  const raw = BigInt(String(rawBalance || "0"));
-  const divisor = 1000000n;
+  try {
+    const raw = BigInt(String(rawBalance || "0"));
+    const divisor = 1000000n;
 
-  const whole = raw / divisor;
+    const whole = raw / divisor;
 
-  const decimal =
-    (raw % divisor)
-      .toString()
-      .padStart(USDT_DECIMALS, "0");
+    const decimal =
+      (raw % divisor)
+        .toString()
+        .padStart(USDT_DECIMALS, "0");
 
-  return `${whole}.${decimal}`;
+    return `${whole}.${decimal}`;
+  } catch {
+    return "0.000000";
+  }
 }
 
 export default async function handler(req, res) {
-
   if (req.method !== "GET") {
     return res.status(405).json({
       success: false,
@@ -35,189 +39,103 @@ export default async function handler(req, res) {
   }
 
   try {
-
-    /* =========================
-       VARIÁVEIS OBRIGATÓRIAS
-    ========================= */
-
-    if (!process.env.DATABASE_URL) {
-      return res.status(500).json({
+    if (!isValidTronAddress(WALLET_ADDRESS)) {
+      return res.status(400).json({
         success: false,
-        error: "DATABASE_URL não configurada."
+        error: "Endereço TRON inválido."
       });
     }
 
-    if (!process.env.TRONGRID_API_KEY) {
+    const apiKey =
+      process.env.TRONGRID_API_KEY;
+
+    if (!apiKey) {
       return res.status(500).json({
         success: false,
         error: "TRONGRID_API_KEY não configurada."
       });
     }
 
-    /* =========================
-       BANCO DE DADOS
-    ========================= */
+    const url =
+      `${TRON_API}/v1/accounts/${WALLET_ADDRESS}/trc20/balance` +
+      `?contract_address=${USDT_CONTRACT}`;
 
-    const sql =
-      neon(process.env.DATABASE_URL);
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "TRON-PRO-API-KEY": apiKey
+      },
+      cache: "no-store"
+    });
 
-    /* =========================
-       OBTER CARTEIRA MAINNET
-    ========================= */
-
-    const wallets = await sql`
-      SELECT wallet_address
-      FROM wallets
-      WHERE network = 'TRON Mainnet'
-        AND asset = 'USDT'
-        AND status = 'mainnet'
-      ORDER BY id DESC
-      LIMIT 1
-    `;
-
-    if (wallets.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error:
-          "Nenhuma carteira TRON Mainnet configurada."
-      });
-    }
-
-    const address =
-      String(
-        wallets[0].wallet_address || ""
-      ).trim();
-
-    if (!isValidTronAddress(address)) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "O endereço TRON configurado é inválido."
-      });
-    }
-
-    /* =========================
-       CONSULTA TRON MAINNET
-    ========================= */
-
-    const accountUrl =
-      `${TRON_API}/v1/accounts/${address}` +
-      `?only_confirmed=true`;
-
-    const headers = {
-      "Accept": "application/json",
-      "TRON-PRO-API-KEY":
-        process.env.TRONGRID_API_KEY
-    };
-
-    const response =
-      await fetch(accountUrl, {
-        method: "GET",
-        headers,
-        cache: "no-store"
-      });
-
-    const data =
-      await response.json();
+    const data = await response.json();
 
     if (!response.ok) {
-
       console.error(
-        "TRONGRID ERROR:",
+        "TRONGRID BALANCE ERROR:",
+        response.status,
         data
       );
 
       return res.status(502).json({
         success: false,
-        error:
-          "Não foi possível consultar a TRON Mainnet."
+        error: "TRONGrid rejeitou a consulta.",
+        tronGridStatus: response.status
       });
     }
 
-    /* =========================
-       LOCALIZAR USDT TRC-20
-    ========================= */
+    const items =
+      Array.isArray(data?.data)
+        ? data.data
+        : [];
 
-    let balance = "0.000000";
+    const token =
+      items.find((item) =>
+        String(
+          item?.token_id ||
+          item?.contract_address ||
+          ""
+        ).toLowerCase() ===
+        USDT_CONTRACT.toLowerCase()
+      ) || items[0];
 
-    const account =
-      Array.isArray(data.data)
-        ? data.data[0]
-        : null;
+    const rawBalance =
+      String(token?.balance || "0");
 
-    if (
-      account &&
-      Array.isArray(account.trc20)
-    ) {
-
-      for (const token of account.trc20) {
-
-        if (
-          !token ||
-          typeof token !== "object"
-        ) {
-          continue;
-        }
-
-        const rawBalance =
-          token[USDT_CONTRACT];
-
-        if (
-          rawBalance !== undefined
-        ) {
-
-          balance =
-            formatUsdtBalance(
-              rawBalance
-            );
-
-          break;
-        }
-      }
-    }
-
-    /* =========================
-       RESPOSTA
-    ========================= */
+    const balance =
+      formatUsdtBalance(rawBalance);
 
     return res.status(200).json({
-
       success: true,
 
-      network:
-        "TRON Mainnet",
+      wallet: {
+        address: WALLET_ADDRESS,
+        network: "TRON Mainnet",
+        asset: "USDT",
+        standard: "TRC-20",
+        contract: USDT_CONTRACT,
 
-      token:
-        "USDT",
+        connected: true,
+        configured: true,
 
-      standard:
-        "TRC-20",
+        balance,
+        balanceRaw: rawBalance,
 
-      contract:
-        USDT_CONTRACT,
-
-      address,
-
-      balance,
-
-      confirmed:
-        true,
-
-      source:
-        "TRON Mainnet / TronGrid"
+        confirmed: true,
+        source: "TRONGrid"
+      }
     });
 
   } catch (error) {
-
     console.error(
       "USDTMZ BLOCKCHAIN ERROR:",
-      error
+      error?.message || error
     );
 
     return res.status(500).json({
       success: false,
-      error:
-        "Erro interno ao consultar a blockchain."
+      error: "Erro interno ao consultar a blockchain."
     });
   }
 }
