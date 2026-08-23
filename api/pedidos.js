@@ -1,107 +1,28 @@
 import { neon } from "@neondatabase/serverless";
+import { TronWeb } from "tronweb";
 
-export default async function handler(req, res) {
-  if (req.method !== "GET") {
-    return res.status(405).json({
-      success: false,
-      error: "Método não permitido"
-    });
+function parseUsdtAmount(value) {
+  const text = String(value ?? "").trim();
+
+  if (!/^\d+(\.\d{1,6})?$/.test(text)) {
+    return null;
   }
 
-  try {
-    if (!process.env.DATABASE_URL) {
-      return res.status(500).json({
-        success: false,
-        error: "DATABASE_URL não configurada"
-      });
-    }
+  const [whole, decimal = ""] = text.split(".");
+  const padded = decimal.padEnd(6, "0");
 
-    const sql = neon(process.env.DATABASE_URL);
+  return BigInt(whole) * 1_000_000n + BigInt(padded);
+}
 
-    const orderId = String(
-      req.query.order_id || ""
-    ).trim();
+function formatUsdtAmount(raw) {
+  const value = BigInt(raw);
 
-    /*
-     * Se for informado um pedido,
-     * retorna somente esse pedido.
-     */
+  const whole = value / 1_000_000n;
 
-    if (orderId) {
-      const pedidos = await sql`
-        SELECT
-          order_id,
-          name,
-          phone,
-          operation,
-          payment,
-          amount,
-          usdt_amount,
-          rate,
-          status,
-          mpesa_transaction_id,
-          blockchain_tx_hash,
-          wallet_address,
-          created_at,
-          updated_at
-        FROM orders
-        WHERE order_id = ${orderId}
-        LIMIT 1
-      `;
+  const decimal =
+    (value % 1_000_000n)
+      .toString()
+      .padStart(6, "0");
 
-      if (pedidos.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: "Pedido não encontrado."
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        pedido: pedidos[0]
-      });
-    }
-
-    /*
-     * Sem order_id:
-     * lista os últimos 50 pedidos.
-     */
-
-    const pedidos = await sql`
-      SELECT
-        order_id,
-        name,
-        phone,
-        operation,
-        payment,
-        amount,
-        usdt_amount,
-        rate,
-        status,
-        mpesa_transaction_id,
-        blockchain_tx_hash,
-        wallet_address,
-        created_at,
-        updated_at
-      FROM orders
-      ORDER BY created_at DESC
-      LIMIT 50
-    `;
-
-    return res.status(200).json({
-      success: true,
-      pedidos
-    });
-
-  } catch (error) {
-    console.error(
-      "USDTMZ PEDIDOS ERROR:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      error: "Não foi possível carregar os pedidos."
-    });
-  }
+  return `${whole}.${decimal}`;
 }
