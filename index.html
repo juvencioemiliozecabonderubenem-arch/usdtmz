@@ -12,12 +12,8 @@ async function requestWithdrawal() {
   const message =
     document.getElementById("withdrawalMessage");
 
-  if (
-    !addressInput ||
-    !amountInput ||
-    !button ||
-    !message
-  ) {
+  if (!addressInput || !amountInput || !button || !message) {
+    console.error("Elementos da retirada não encontrados.");
     return;
   }
 
@@ -84,13 +80,13 @@ async function requestWithdrawal() {
 
 
   /* =========================
-     PROCESSAR PEDIDO
+     PROCESSAR NO BACKEND
   ========================= */
 
   button.disabled = true;
 
   message.textContent =
-    "A processar retirada...";
+    "A criar solicitação de retirada...";
 
 
   try {
@@ -106,13 +102,8 @@ async function requestWithdrawal() {
           },
 
           body: JSON.stringify({
-
-            destination_address:
-              address,
-
-            amount:
-              amount
-
+            destination_address: address,
+            amount: amount
           })
         }
       );
@@ -129,18 +120,20 @@ async function requestWithdrawal() {
 
       throw new Error(
         data.error ||
-        "Não foi possível processar a retirada."
+        "Não foi possível criar a retirada."
       );
     }
 
 
     const withdrawal =
-      data.withdrawal || {};
+      data.withdrawal || data;
 
 
-    /* =========================
-       ESTADO
-    ========================= */
+    const withdrawalId =
+      withdrawal.withdrawal_id ||
+      data.withdrawal_id ||
+      "";
+
 
     const status =
       String(
@@ -150,8 +143,12 @@ async function requestWithdrawal() {
       ).toUpperCase();
 
 
+    /* =========================
+       TEXTO DO ESTADO
+    ========================= */
+
     let statusText =
-      "Pedido recebido.";
+      "Pedido recebido. Aguardando autorização.";
 
 
     switch (status) {
@@ -175,7 +172,7 @@ async function requestWithdrawal() {
       case "READY_FOR_SECURE_SIGNING":
 
         statusText =
-          "Transação pronta para assinatura.";
+          "Transação pronta para assinatura segura.";
 
         break;
 
@@ -218,6 +215,7 @@ async function requestWithdrawal() {
           "Estado: " + status;
 
         break;
+
     }
 
 
@@ -237,8 +235,7 @@ async function requestWithdrawal() {
     if (txHash) {
 
       txHtml =
-        "<br>" +
-        "<strong>TXID:</strong> " +
+        "<br><strong>TXID:</strong> " +
         escapeHtml(txHash);
 
     }
@@ -253,11 +250,7 @@ async function requestWithdrawal() {
       "<strong>Retirada registada.</strong><br>" +
 
       "ID: " +
-      escapeHtml(
-        withdrawal.withdrawal_id ||
-        data.withdrawal_id ||
-        ""
-      ) +
+      escapeHtml(withdrawalId) +
 
       "<br>" +
 
@@ -292,8 +285,12 @@ async function requestWithdrawal() {
       txHtml;
 
 
-    addressInput.value = "";
+    /*
+     * Só limpamos os campos depois
+     * que o backend confirmou a criação.
+     */
 
+    addressInput.value = "";
     amountInput.value = "";
 
 
@@ -306,12 +303,10 @@ async function requestWithdrawal() {
 
 
     message.innerHTML =
-
       "<strong>Erro:</strong><br>" +
-
       escapeHtml(
         error.message ||
-        "Não foi possível processar a retirada."
+        "Não foi possível criar a retirada."
       );
 
 
@@ -345,25 +340,29 @@ function escapeHtml(value) {
   return String(value)
 
     .replaceAll("&", "&amp;")
-
     .replaceAll("<", "&lt;")
-
     .replaceAll(">", "&gt;")
-
     .replaceAll('"', "&quot;")
-
     .replaceAll("'", "&#039;");
 
 }
 
 
 /* =========================
-   BOTÃO
+   BOTÃO DE RETIRADA
 ========================= */
 
-document
-  .getElementById("withdrawalButton")
-  ?.addEventListener(
+const withdrawalButton =
+  document.getElementById(
+    "withdrawalButton"
+  );
+
+
+if (withdrawalButton) {
+
+  withdrawalButton.addEventListener(
     "click",
     requestWithdrawal
   );
+
+}
