@@ -1,309 +1,1018 @@
-<!-- =========================
-     RETIRADA USDT
-========================= -->
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<section id="withdrawalSection">
+  <title>USDTMZ</title>
 
-  <h2>Retirada USDT</h2>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+      color: #222;
+    }
 
-  <p style="margin-bottom:15px;">
-    As retiradas USDT TRC-20 seguem um fluxo de
-    autorização, assinatura segura, transmissão
-    e confirmação na TRON Mainnet.
-  </p>
+    main {
+      max-width: 600px;
+      margin: auto;
+    }
 
-  <label for="withdrawalAddress">
-    Endereço TRON
-  </label>
+    section {
+      background: white;
+      padding: 20px;
+      margin-bottom: 18px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    }
 
-  <input
-    id="withdrawalAddress"
-    type="text"
-    placeholder="Endereço TRON TRC-20"
-    autocomplete="off"
-  >
+    h1, h2 {
+      margin-top: 0;
+    }
 
-  <label for="withdrawalAmount">
-    Valor USDT
-  </label>
+    label {
+      display: block;
+      margin-top: 12px;
+      margin-bottom: 6px;
+      font-weight: bold;
+    }
 
-  <input
-    id="withdrawalAmount"
-    type="number"
-    min="0"
-    step="0.000001"
-    placeholder="Ex.: 2"
-  >
+    input,
+    select,
+    button {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
 
-  <button
-    type="button"
-    id="withdrawalButton"
-  >
-    Solicitar retirada
-  </button>
+    button {
+      margin-top: 15px;
+      cursor: pointer;
+      font-weight: bold;
+    }
 
-  <div
-    id="withdrawalMessage"
-    class="orders-message"
-    aria-live="polite"
-  ></div>
+    .balance {
+      font-size: 28px;
+      font-weight: bold;
+    }
 
-</section>
+    .message {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 8px;
+    }
+
+    .orders-message {
+      margin-top: 15px;
+      line-height: 1.6;
+    }
+
+    .payment-option {
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+<main>
+
+  <h1>USDTMZ</h1>
+
+  <!-- =========================
+       SALDO
+  ========================= -->
+
+  <section id="balanceSection">
+
+    <h2>Meu saldo</h2>
+
+    <div class="balance">
+      <span id="usdtBalance">--</span> USDT
+    </div>
+
+    <p>
+      Saldo real disponibilizado pelo sistema.
+    </p>
+
+    <button
+      type="button"
+      id="refreshBalanceButton"
+    >
+      Atualizar saldo
+    </button>
+
+    <div
+      id="balanceMessage"
+      class="message"
+      aria-live="polite"
+    ></div>
+
+  </section>
+
+
+  <!-- =========================
+       CONVERSOR
+  ========================= -->
+
+  <section id="converterSection">
+
+    <h2>Comprar USDT</h2>
+
+    <label for="mznAmount">
+      Valor em MZN
+    </label>
+
+    <input
+      id="mznAmount"
+      type="number"
+      min="0"
+      step="0.01"
+      placeholder="Ex.: 640"
+    >
+
+    <p>
+      Taxa de referência:
+      <strong>1 USDT = 64 MZN</strong>
+    </p>
+
+    <p>
+      Você receberá:
+      <strong>
+        <span id="usdtPreview">0.000000</span>
+        USDT
+      </strong>
+    </p>
+
+  </section>
+
+
+  <!-- =========================
+       MÉTODO DE PAGAMENTO
+  ========================= -->
+
+  <section id="paymentSection">
+
+    <h2>Forma de pagamento</h2>
+
+    <label for="paymentMethod">
+      Escolha o método
+    </label>
+
+    <select id="paymentMethod">
+
+      <option value="">
+        Selecionar
+      </option>
+
+      <option value="mpesa">
+        M-Pesa
+      </option>
+
+      <option value="emola">
+        e-Mola
+      </option>
+
+    </select>
+
+
+    <label for="paymentPhone">
+      Número de telefone
+    </label>
+
+    <input
+      id="paymentPhone"
+      type="tel"
+      placeholder="Ex.: 84xxxxxxx"
+      autocomplete="off"
+    >
+
+
+    <button
+      type="button"
+      id="buyButton"
+    >
+      Comprar USDT
+    </button>
+
+
+    <div
+      id="paymentMessage"
+      class="message"
+      aria-live="polite"
+    ></div>
+
+  </section>
+
+
+  <!-- =========================
+       RETIRADA USDT
+  ========================= -->
+
+  <section id="withdrawalSection">
+
+    <h2>Retirada USDT</h2>
+
+    <p>
+      Retirada de USDT através da rede TRON TRC-20.
+    </p>
+
+    <label for="withdrawalAddress">
+      Endereço TRON
+    </label>
+
+    <input
+      id="withdrawalAddress"
+      type="text"
+      placeholder="Endereço TRON TRC-20"
+      autocomplete="off"
+    >
+
+
+    <label for="withdrawalAmount">
+      Valor USDT
+    </label>
+
+    <input
+      id="withdrawalAmount"
+      type="number"
+      min="0"
+      step="0.000001"
+      placeholder="Ex.: 2"
+    >
+
+
+    <button
+      type="button"
+      id="withdrawalButton"
+    >
+      Solicitar retirada
+    </button>
+
+
+    <div
+      id="withdrawalMessage"
+      class="orders-message"
+      aria-live="polite"
+    ></div>
+
+  </section>
+
+</main>
+
 
 <script>
-(function () {
 
-  "use strict";
+"use strict";
 
-  const CONFIG = {
-    api: "/api/withdrawal",
-    network: "TRON Mainnet",
-    asset: "USDT TRC-20",
-    maxAmount: 1000000
-  };
 
-  function validateTronAddress(address) {
-    return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
-      String(address || "").trim()
+/* =========================
+   CONFIGURAÇÃO
+========================= */
+
+const CONFIG = {
+
+  rate: 64,
+
+  apiWallet:
+    "/api/wallet",
+
+  apiBlockchain:
+    "/api/blockchain",
+
+  apiOrder:
+    "/api/order",
+
+  apiWithdrawal:
+    "/api/withdrawal"
+
+};
+
+
+/* =========================
+   CONVERSOR
+========================= */
+
+const mznAmount =
+  document.getElementById("mznAmount");
+
+const usdtPreview =
+  document.getElementById("usdtPreview");
+
+
+function updateConverter() {
+
+  const mzn =
+    Number(mznAmount.value || 0);
+
+  if (
+    !Number.isFinite(mzn) ||
+    mzn <= 0
+  ) {
+
+    usdtPreview.textContent =
+      "0.000000";
+
+    return;
+  }
+
+  const usdt =
+    mzn / CONFIG.rate;
+
+  usdtPreview.textContent =
+    usdt.toFixed(6);
+
+}
+
+
+if (mznAmount) {
+
+  mznAmount.addEventListener(
+    "input",
+    updateConverter
+  );
+
+}
+
+
+/* =========================
+   SALDO
+========================= */
+
+async function loadBalance() {
+
+  const balanceElement =
+    document.getElementById(
+      "usdtBalance"
     );
+
+  const message =
+    document.getElementById(
+      "balanceMessage"
+    );
+
+  if (!balanceElement) {
+    return;
   }
 
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
+  balanceElement.textContent =
+    "...";
 
-  function getStatusText(status) {
+  try {
 
-    switch (status) {
-
-      case "PENDING":
-        return "Aguardando autorização.";
-
-      case "AUTHORIZED":
-        return "Retirada autorizada.";
-
-      case "READY_FOR_SECURE_SIGNING":
-        return "Pronta para assinatura segura.";
-
-      case "PROCESSING":
-        return "Retirada em processamento.";
-
-      case "BROADCASTED":
-        return "Transação transmitida para a TRON.";
-
-      case "COMPLETED":
-        return "Retirada confirmada na TRON.";
-
-      case "FAILED":
-        return "A retirada falhou.";
-
-      default:
-        return "Estado: " + status;
-    }
-  }
-
-  async function requestWithdrawal() {
-
-    const addressInput =
-      document.getElementById("withdrawalAddress");
-
-    const amountInput =
-      document.getElementById("withdrawalAmount");
-
-    const button =
-      document.getElementById("withdrawalButton");
-
-    const message =
-      document.getElementById("withdrawalMessage");
-
-    if (
-      !addressInput ||
-      !amountInput ||
-      !button ||
-      !message
-    ) {
-      console.error("Elementos da retirada não encontrados.");
-      return;
-    }
-
-    const address =
-      addressInput.value.trim();
-
-    const amount =
-      amountInput.value.trim();
-
-    if (!validateTronAddress(address)) {
-      message.textContent =
-        "Endereço TRON inválido.";
-      return;
-    }
-
-    if (!/^\d+(\.\d{1,6})?$/.test(amount)) {
-      message.textContent =
-        "Informe um valor USDT válido, com até 6 casas decimais.";
-      return;
-    }
-
-    const numericAmount = Number(amount);
-
-    if (
-      !Number.isFinite(numericAmount) ||
-      numericAmount <= 0
-    ) {
-      message.textContent =
-        "Informe um valor USDT válido.";
-      return;
-    }
-
-    if (numericAmount > CONFIG.maxAmount) {
-      message.textContent =
-        "O valor máximo por retirada é 1.000.000 USDT.";
-      return;
-    }
-
-    button.disabled = true;
-
-    message.textContent =
-      "A criar solicitação de retirada...";
-
-    try {
-
-      const response = await fetch(
-        CONFIG.api,
+    const response =
+      await fetch(
+        CONFIG.apiWallet,
         {
-          method: "POST",
-
+          method: "GET",
           headers: {
-            "Content-Type": "application/json"
-          },
-
-          body: JSON.stringify({
-            destination_address: address,
-            amount: amount
-          })
+            "Accept": "application/json"
+          }
         }
       );
 
-      let data;
+    const data =
+      await response.json();
 
-      try {
-        data = await response.json();
-      } catch {
-        throw new Error(
-          "O servidor devolveu uma resposta inválida."
-        );
-      }
+    if (
+      !response.ok ||
+      !data
+    ) {
 
-      if (
-        !response.ok ||
-        !data ||
-        !data.success
-      ) {
-        throw new Error(
-          data?.error ||
-          "Não foi possível criar a retirada."
-        );
-      }
-
-      const withdrawal =
-        data.withdrawal || data;
-
-      const withdrawalId =
-        withdrawal.withdrawal_id ||
-        data.withdrawal_id ||
-        "";
-
-      const status =
-        String(
-          withdrawal.status ||
-          data.status ||
-          "PENDING"
-        ).toUpperCase();
-
-      const statusText =
-        getStatusText(status);
-
-      const txHash =
-        withdrawal.tx_hash ||
-        data.tx_hash ||
-        "";
-
-      let txHtml = "";
-
-      if (txHash) {
-        txHtml =
-          "<br><strong>TXID:</strong> " +
-          escapeHtml(txHash);
-      }
-
-      message.innerHTML =
-        "<strong>Retirada registada.</strong><br>" +
-
-        "ID: " +
-        escapeHtml(withdrawalId) +
-
-        "<br>Rede: " +
-        CONFIG.network +
-
-        "<br>Ativo: " +
-        CONFIG.asset +
-
-        "<br>Destino: " +
-        escapeHtml(address) +
-
-        "<br>Valor: " +
-        escapeHtml(
-          String(
-            withdrawal.amount ?? amount
-          )
-        ) +
-
-        " USDT" +
-
-        "<br>Estado: " +
-        escapeHtml(statusText) +
-
-        txHtml;
-
-      addressInput.value = "";
-      amountInput.value = "";
-
-    } catch (error) {
-
-      console.error(
-        "USDTMZ WITHDRAWAL ERROR:",
-        error
+      throw new Error(
+        data?.error ||
+        "Não foi possível consultar o saldo."
       );
 
-      message.innerHTML =
-        "<strong>Erro:</strong><br>" +
-        escapeHtml(
-          error?.message ||
-          "Não foi possível criar a retirada."
-        );
-
-    } finally {
-
-      button.disabled = false;
     }
-  }
 
-  const button =
-    document.getElementById("withdrawalButton");
+    const balance =
+      data.balance ??
+      data.usdt_balance ??
+      data.usdt ??
+      data.wallet?.balance ??
+      data.wallet?.usdt_balance;
 
-  if (button) {
+    if (
+      balance === undefined ||
+      balance === null
+    ) {
 
-    button.addEventListener(
-      "click",
-      requestWithdrawal
+      throw new Error(
+        "O backend não devolveu o saldo USDT."
+      );
+
+    }
+
+    balanceElement.textContent =
+      Number(balance).toFixed(6);
+
+    if (message) {
+
+      message.textContent =
+        "Saldo atualizado.";
+
+    }
+
+  } catch (error) {
+
+    console.error(
+      "BALANCE ERROR:",
+      error
     );
 
+    balanceElement.textContent =
+      "--";
+
+    if (message) {
+
+      message.textContent =
+        error.message ||
+        "Saldo indisponível.";
+
+    }
+
   }
 
-})();
+}
+
+
+const refreshBalanceButton =
+  document.getElementById(
+    "refreshBalanceButton"
+  );
+
+
+if (refreshBalanceButton) {
+
+  refreshBalanceButton.addEventListener(
+    "click",
+    loadBalance
+  );
+
+}
+
+
+/* =========================
+   COMPRA
+========================= */
+
+async function buyUsdt() {
+
+  const amountInput =
+    document.getElementById(
+      "mznAmount"
+    );
+
+  const methodInput =
+    document.getElementById(
+      "paymentMethod"
+    );
+
+  const phoneInput =
+    document.getElementById(
+      "paymentPhone"
+    );
+
+  const button =
+    document.getElementById(
+      "buyButton"
+    );
+
+  const message =
+    document.getElementById(
+      "paymentMessage"
+    );
+
+
+  const mzn =
+    amountInput.value.trim();
+
+  const method =
+    methodInput.value;
+
+  const phone =
+    phoneInput.value.trim();
+
+
+  if (!mzn || Number(mzn) <= 0) {
+
+    message.textContent =
+      "Informe o valor em MZN.";
+
+    return;
+
+  }
+
+
+  if (!method) {
+
+    message.textContent =
+      "Escolha M-Pesa ou e-Mola.";
+
+    return;
+
+  }
+
+
+  if (!phone) {
+
+    message.textContent =
+      "Informe o número de telefone.";
+
+    return;
+
+  }
+
+
+  const usdt =
+    Number(mzn) / CONFIG.rate;
+
+
+  button.disabled = true;
+
+  message.textContent =
+    "A criar pedido de pagamento...";
+
+
+  try {
+
+    const response =
+      await fetch(
+        CONFIG.apiOrder,
+        {
+
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+
+            amount_mzn:
+              mzn,
+
+            amount_usdt:
+              usdt.toFixed(6),
+
+            payment_method:
+              method,
+
+            phone:
+              phone
+
+          })
+
+        }
+      );
+
+
+    let data;
+
+    try {
+
+      data =
+        await response.json();
+
+    } catch {
+
+      throw new Error(
+        "Resposta inválida do servidor."
+      );
+
+    }
+
+
+    if (
+      !response.ok ||
+      !data ||
+      data.success === false
+    ) {
+
+      throw new Error(
+        data?.error ||
+        "Não foi possível criar o pedido."
+      );
+
+    }
+
+
+    message.innerHTML =
+      "<strong>Pedido criado.</strong><br>" +
+      "Método: " +
+      escapeHtml(method.toUpperCase()) +
+      "<br>Valor: " +
+      escapeHtml(mzn) +
+      " MZN<br>USDT: " +
+      escapeHtml(
+        usdt.toFixed(6)
+      );
+
+
+  } catch (error) {
+
+    console.error(
+      "BUY ERROR:",
+      error
+    );
+
+    message.textContent =
+      error.message ||
+      "Erro ao criar pedido.";
+
+  } finally {
+
+    button.disabled = false;
+
+  }
+
+}
+
+
+const buyButton =
+  document.getElementById(
+    "buyButton"
+  );
+
+
+if (buyButton) {
+
+  buyButton.addEventListener(
+    "click",
+    buyUsdt
+  );
+
+}
+
+
+/* =========================
+   RETIRADA
+========================= */
+
+function validateTronAddress(address) {
+
+  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
+    String(address || "").trim()
+  );
+
+}
+
+
+function escapeHtml(value) {
+
+  return String(value)
+
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
+
+}
+
+
+function getWithdrawalStatusText(status) {
+
+  switch (status) {
+
+    case "PENDING":
+      return "Aguardando autorização.";
+
+    case "AUTHORIZED":
+      return "Retirada autorizada.";
+
+    case "READY_FOR_SECURE_SIGNING":
+      return "Pronta para assinatura segura.";
+
+    case "PROCESSING":
+      return "Retirada em processamento.";
+
+    case "BROADCASTED":
+      return "Transação transmitida para a TRON.";
+
+    case "COMPLETED":
+      return "Retirada confirmada na TRON.";
+
+    case "FAILED":
+      return "A retirada falhou.";
+
+    default:
+      return "Estado: " + status;
+
+  }
+
+}
+
+
+async function requestWithdrawal() {
+
+  const addressInput =
+    document.getElementById(
+      "withdrawalAddress"
+    );
+
+  const amountInput =
+    document.getElementById(
+      "withdrawalAmount"
+    );
+
+  const button =
+    document.getElementById(
+      "withdrawalButton"
+    );
+
+  const message =
+    document.getElementById(
+      "withdrawalMessage"
+    );
+
+
+  const address =
+    addressInput.value.trim();
+
+  const amount =
+    amountInput.value.trim();
+
+
+  if (
+    !validateTronAddress(
+      address
+    )
+  ) {
+
+    message.textContent =
+      "Endereço TRON inválido.";
+
+    return;
+
+  }
+
+
+  if (
+    !/^\d+(\.\d{1,6})?$/.test(
+      amount
+    )
+  ) {
+
+    message.textContent =
+      "Informe um valor USDT válido, com até 6 casas decimais.";
+
+    return;
+
+  }
+
+
+  const numericAmount =
+    Number(amount);
+
+
+  if (
+    !Number.isFinite(
+      numericAmount
+    ) ||
+    numericAmount <= 0
+  ) {
+
+    message.textContent =
+      "Informe um valor USDT válido.";
+
+    return;
+
+  }
+
+
+  if (
+    numericAmount >
+    1000000
+  ) {
+
+    message.textContent =
+      "O valor máximo por retirada é 1.000.000 USDT.";
+
+    return;
+
+  }
+
+
+  button.disabled = true;
+
+  message.textContent =
+    "A criar solicitação de retirada...";
+
+
+  try {
+
+    const response =
+      await fetch(
+        CONFIG.apiWithdrawal,
+        {
+
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+
+            destination_address:
+              address,
+
+            amount:
+              amount
+
+          })
+
+        }
+      );
+
+
+    let data;
+
+    try {
+
+      data =
+        await response.json();
+
+    } catch {
+
+      throw new Error(
+        "O servidor devolveu uma resposta inválida."
+      );
+
+    }
+
+
+    if (
+      !response.ok ||
+      !data ||
+      !data.success
+    ) {
+
+      throw new Error(
+        data?.error ||
+        "Não foi possível criar a retirada."
+      );
+
+    }
+
+
+    const withdrawal =
+      data.withdrawal ||
+      data;
+
+
+    const withdrawalId =
+      withdrawal.withdrawal_id ||
+      data.withdrawal_id ||
+      "";
+
+
+    const status =
+      String(
+        withdrawal.status ||
+        data.status ||
+        "PENDING"
+      ).toUpperCase();
+
+
+    const txHash =
+      withdrawal.tx_hash ||
+      data.tx_hash ||
+      "";
+
+
+    let result =
+      "<strong>Retirada registada.</strong><br>" +
+
+      "ID: " +
+      escapeHtml(
+        withdrawalId
+      ) +
+
+      "<br>Rede: TRON Mainnet" +
+
+      "<br>Ativo: USDT TRC-20" +
+
+      "<br>Destino: " +
+      escapeHtml(
+        address
+      ) +
+
+      "<br>Valor: " +
+      escapeHtml(
+        String(
+          withdrawal.amount ??
+          amount
+        )
+      ) +
+
+      " USDT" +
+
+      "<br>Estado: " +
+      escapeHtml(
+        getWithdrawalStatusText(
+          status
+        )
+      );
+
+
+    if (txHash) {
+
+      result +=
+        "<br><strong>TXID:</strong> " +
+        escapeHtml(
+          txHash
+        );
+
+    }
+
+
+    message.innerHTML =
+      result;
+
+
+    addressInput.value =
+      "";
+
+    amountInput.value =
+      "";
+
+
+  } catch (error) {
+
+    console.error(
+      "WITHDRAWAL ERROR:",
+      error
+    );
+
+    message.innerHTML =
+      "<strong>Erro:</strong><br>" +
+      escapeHtml(
+        error?.message ||
+        "Não foi possível processar a retirada."
+      );
+
+  } finally {
+
+    button.disabled =
+      false;
+
+  }
+
+}
+
+
+const withdrawalButton =
+  document.getElementById(
+    "withdrawalButton"
+  );
+
+
+if (withdrawalButton) {
+
+  withdrawalButton.addEventListener(
+    "click",
+    requestWithdrawal
+  );
+
+}
+
+
+/* =========================
+   INICIALIZAÇÃO
+========================= */
+
+loadBalance();
+
 </script>
+
+</body>
+</html>
