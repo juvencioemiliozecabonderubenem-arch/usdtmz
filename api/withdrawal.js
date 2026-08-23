@@ -82,6 +82,4 @@ function formatUsdtAmount(raw) {
   return `${whole}.${decimal}`;
 }
 
-// daqui para baixo continua o restante
-// do seu api/withdrawal.js
 
