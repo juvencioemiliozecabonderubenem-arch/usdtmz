@@ -1,4 +1,5 @@
 async function requestWithdrawal() {
+
   const addressInput =
     document.getElementById("withdrawalAddress");
 
@@ -11,134 +12,214 @@ async function requestWithdrawal() {
   const message =
     document.getElementById("withdrawalMessage");
 
-  if (!addressInput || !amountInput || !button || !message) {
+  if (
+    !addressInput ||
+    !amountInput ||
+    !button ||
+    !message
+  ) {
     return;
   }
 
-  const address = addressInput.value.trim();
-  const amount = amountInput.value.trim();
+  const address =
+    addressInput.value.trim();
+
+  const amount =
+    amountInput.value.trim();
+
 
   /* =========================
      VALIDAR ENDEREÇO TRON
   ========================= */
 
   if (!validateTronAddress(address)) {
+
     message.textContent =
       "Endereço TRON inválido.";
+
     return;
   }
+
 
   /* =========================
      VALIDAR VALOR USDT
   ========================= */
 
   if (!/^\d+(\.\d{1,6})?$/.test(amount)) {
+
     message.textContent =
       "Informe um valor USDT válido, com até 6 casas decimais.";
+
     return;
   }
 
-  const numericAmount = Number(amount);
 
-  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+  const numericAmount =
+    Number(amount);
+
+
+  if (
+    !Number.isFinite(numericAmount) ||
+    numericAmount <= 0
+  ) {
+
     message.textContent =
       "Informe um valor USDT válido.";
+
     return;
   }
+
 
   /* =========================
      LIMITE
   ========================= */
 
   if (numericAmount > 1000000) {
+
     message.textContent =
       "O valor máximo por retirada é 1.000.000 USDT.";
+
     return;
   }
 
+
   /* =========================
-     CONFIRMAÇÃO VISUAL
+     PROCESSAR PEDIDO
   ========================= */
 
   button.disabled = true;
 
   message.textContent =
-    "A criar solicitação de retirada...";
+    "A processar retirada...";
+
 
   try {
-    const response = await fetch("/api/withdrawal", {
-      method: "POST",
 
-      headers: {
-        "Content-Type": "application/json"
-      },
+    const response =
+      await fetch(
+        "/api/withdrawal",
+        {
+          method: "POST",
 
-      body: JSON.stringify({
-        destination_address: address,
-        amount: amount
-      })
-    });
+          headers: {
+            "Content-Type": "application/json"
+          },
 
-    const data = await response.json();
+          body: JSON.stringify({
 
-    if (!response.ok || !data.success) {
+            destination_address:
+              address,
+
+            amount:
+              amount
+
+          })
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if (
+      !response.ok ||
+      !data.success
+    ) {
+
       throw new Error(
         data.error ||
-        "Não foi possível criar a retirada."
+        "Não foi possível processar a retirada."
       );
     }
+
 
     const withdrawal =
       data.withdrawal || {};
 
+
+    /* =========================
+       ESTADO
+    ========================= */
+
     const status =
       String(
-        withdrawal.status || "PENDING"
+        withdrawal.status ||
+        data.status ||
+        "PENDING"
       ).toUpperCase();
+
 
     let statusText =
       "Pedido recebido.";
 
+
     switch (status) {
+
       case "PENDING":
+
         statusText =
           "Aguardando autorização.";
+
         break;
+
 
       case "AUTHORIZED":
+
         statusText =
           "Retirada autorizada.";
+
         break;
+
 
       case "READY_FOR_SECURE_SIGNING":
+
         statusText =
-          "Transação preparada para assinatura segura.";
+          "Transação pronta para assinatura.";
+
         break;
+
 
       case "PROCESSING":
+
         statusText =
           "Retirada em processamento.";
+
         break;
+
 
       case "BROADCASTED":
+
         statusText =
           "Transação transmitida para a TRON.";
+
         break;
+
 
       case "COMPLETED":
+
         statusText =
           "Retirada confirmada na TRON.";
+
         break;
+
 
       case "FAILED":
+
         statusText =
           "A retirada falhou.";
+
         break;
 
+
       default:
+
         statusText =
           "Estado: " + status;
+
+        break;
     }
+
 
     /* =========================
        TXID
@@ -149,46 +230,72 @@ async function requestWithdrawal() {
       data.tx_hash ||
       "";
 
+
     let txHtml = "";
 
+
     if (txHash) {
+
       txHtml =
-        "<br>TXID: " +
+        "<br>" +
+        "<strong>TXID:</strong> " +
         escapeHtml(txHash);
+
     }
+
 
     /* =========================
        RESULTADO
     ========================= */
 
     message.innerHTML =
+
       "<strong>Retirada registada.</strong><br>" +
+
       "ID: " +
       escapeHtml(
-        withdrawal.withdrawal_id || ""
+        withdrawal.withdrawal_id ||
+        data.withdrawal_id ||
+        ""
       ) +
+
       "<br>" +
+
       "Rede: TRON Mainnet" +
+
       "<br>" +
+
       "Ativo: USDT TRC-20" +
+
       "<br>" +
+
       "Destino: " +
       escapeHtml(address) +
+
       "<br>" +
+
       "Valor: " +
       escapeHtml(
         String(
-          withdrawal.amount ?? amount
+          withdrawal.amount ??
+          amount
         )
       ) +
+
       " USDT" +
+
       "<br>" +
+
       "Estado: " +
       escapeHtml(statusText) +
+
       txHtml;
 
+
     addressInput.value = "";
+
     amountInput.value = "";
+
 
   } catch (error) {
 
@@ -197,16 +304,21 @@ async function requestWithdrawal() {
       error
     );
 
+
     message.innerHTML =
+
       "<strong>Erro:</strong><br>" +
+
       escapeHtml(
         error.message ||
         "Não foi possível processar a retirada."
       );
 
+
   } finally {
 
     button.disabled = false;
+
   }
 }
 
@@ -216,9 +328,11 @@ async function requestWithdrawal() {
 ========================= */
 
 function validateTronAddress(address) {
+
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
     String(address || "").trim()
   );
+
 }
 
 
@@ -227,17 +341,24 @@ function validateTronAddress(address) {
 ========================= */
 
 function escapeHtml(value) {
+
   return String(value)
+
     .replaceAll("&", "&amp;")
+
     .replaceAll("<", "&lt;")
+
     .replaceAll(">", "&gt;")
+
     .replaceAll('"', "&quot;")
+
     .replaceAll("'", "&#039;");
+
 }
 
 
 /* =========================
-   BOTÃO DE RETIRADA
+   BOTÃO
 ========================= */
 
 document
