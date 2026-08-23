@@ -17,11 +17,8 @@ async function requestWithdrawal() {
     return;
   }
 
-  const address =
-    addressInput.value.trim();
-
-  const amount =
-    amountInput.value.trim();
+  const address = addressInput.value.trim();
+  const amount = amountInput.value.trim();
 
 
   /* =========================
@@ -50,8 +47,7 @@ async function requestWithdrawal() {
   }
 
 
-  const numericAmount =
-    Number(amount);
+  const numericAmount = Number(amount);
 
 
   if (
@@ -80,7 +76,7 @@ async function requestWithdrawal() {
 
 
   /* =========================
-     PROCESSAR NO BACKEND
+     ENVIAR AO BACKEND
   ========================= */
 
   button.disabled = true;
@@ -126,7 +122,7 @@ async function requestWithdrawal() {
 
 
     const withdrawal =
-      data.withdrawal || data;
+      data.withdrawal || {};
 
 
     const withdrawalId =
@@ -144,7 +140,7 @@ async function requestWithdrawal() {
 
 
     /* =========================
-       TEXTO DO ESTADO
+       ESTADO
     ========================= */
 
     let statusText =
@@ -215,7 +211,6 @@ async function requestWithdrawal() {
           "Estado: " + status;
 
         break;
-
     }
 
 
@@ -246,7 +241,6 @@ async function requestWithdrawal() {
     ========================= */
 
     message.innerHTML =
-
       "<strong>Retirada registada.</strong><br>" +
 
       "ID: " +
@@ -285,11 +279,6 @@ async function requestWithdrawal() {
       txHtml;
 
 
-    /*
-     * Só limpamos os campos depois
-     * que o backend confirmou a criação.
-     */
-
     addressInput.value = "";
     amountInput.value = "";
 
@@ -306,9 +295,8 @@ async function requestWithdrawal() {
       "<strong>Erro:</strong><br>" +
       escapeHtml(
         error.message ||
-        "Não foi possível criar a retirada."
+        "Não foi possível processar a retirada."
       );
-
 
   } finally {
 
@@ -340,9 +328,13 @@ function escapeHtml(value) {
   return String(value)
 
     .replaceAll("&", "&amp;")
+
     .replaceAll("<", "&lt;")
+
     .replaceAll(">", "&gt;")
+
     .replaceAll('"', "&quot;")
+
     .replaceAll("'", "&#039;");
 
 }
