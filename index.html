@@ -2,18 +2,15 @@
      RETIRADA USDT
 ========================= -->
 
-<section>
+<section id="withdrawalSection">
 
-  <h2>
-    Retirada USDT
-  </h2>
+  <h2>Retirada USDT</h2>
 
   <p style="margin-bottom:15px;">
     As retiradas USDT TRC-20 seguem um fluxo de
     autorização, assinatura segura, transmissão
     e confirmação na TRON Mainnet.
   </p>
-
 
   <label for="withdrawalAddress">
     Endereço TRON
@@ -25,7 +22,6 @@
     placeholder="Endereço TRON TRC-20"
     autocomplete="off"
   >
-
 
   <label for="withdrawalAmount">
     Valor USDT
@@ -39,14 +35,12 @@
     placeholder="Ex.: 2"
   >
 
-
   <button
     type="button"
     id="withdrawalButton"
   >
     Solicitar retirada
   </button>
-
 
   <div
     id="withdrawalMessage"
@@ -56,235 +50,132 @@
 
 </section>
 
-
 <script>
+(function () {
 
-"use strict";
+  "use strict";
 
+  const CONFIG = {
+    api: "/api/withdrawal",
+    network: "TRON Mainnet",
+    asset: "USDT TRC-20",
+    maxAmount: 1000000
+  };
 
-/* =========================
-   CONFIGURAÇÃO
-========================= */
-
-const WITHDRAWAL_CONFIG = {
-
-  apiWithdrawal: "/api/withdrawal",
-
-  network: "TRON Mainnet",
-
-  asset: "USDT TRC-20",
-
-  maxAmount: 1000000
-
-};
-
-
-/* =========================
-   VALIDAR ENDEREÇO TRON
-========================= */
-
-function validateTronAddress(address) {
-
-  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
-    String(address || "").trim()
-  );
-
-}
-
-
-/* =========================
-   ESCAPAR HTML
-========================= */
-
-function escapeHtml(value) {
-
-  return String(value)
-
-    .replaceAll("&", "&amp;")
-
-    .replaceAll("<", "&lt;")
-
-    .replaceAll(">", "&gt;")
-
-    .replaceAll('"', "&quot;")
-
-    .replaceAll("'", "&#039;");
-
-}
-
-
-/* =========================
-   FORMATAR ESTADO
-========================= */
-
-function withdrawalStatusText(status) {
-
-  switch (status) {
-
-    case "PENDING":
-      return "Aguardando autorização.";
-
-    case "AUTHORIZED":
-      return "Retirada autorizada.";
-
-    case "READY_FOR_SECURE_SIGNING":
-      return "Pronta para assinatura segura.";
-
-    case "PROCESSING":
-      return "Retirada em processamento.";
-
-    case "BROADCASTED":
-      return "Transação transmitida para a TRON.";
-
-    case "COMPLETED":
-      return "Retirada confirmada na TRON.";
-
-    case "FAILED":
-      return "A retirada falhou.";
-
-    default:
-      return "Estado: " + status;
-
+  function validateTronAddress(address) {
+    return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
+      String(address || "").trim()
+    );
   }
 
-}
-
-
-/* =========================
-   SOLICITAR RETIRADA
-========================= */
-
-async function requestWithdrawal() {
-
-  const addressInput =
-    document.getElementById(
-      "withdrawalAddress"
-    );
-
-  const amountInput =
-    document.getElementById(
-      "withdrawalAmount"
-    );
-
-  const button =
-    document.getElementById(
-      "withdrawalButton"
-    );
-
-  const message =
-    document.getElementById(
-      "withdrawalMessage"
-    );
-
-
-  if (
-    !addressInput ||
-    !amountInput ||
-    !button ||
-    !message
-  ) {
-
-    console.error(
-      "Elementos da retirada não encontrados."
-    );
-
-    return;
-
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
   }
 
+  function getStatusText(status) {
 
-  const address =
-    addressInput.value.trim();
+    switch (status) {
 
-  const amount =
-    amountInput.value.trim();
+      case "PENDING":
+        return "Aguardando autorização.";
 
+      case "AUTHORIZED":
+        return "Retirada autorizada.";
 
-  /* =========================
-     VALIDAR ENDEREÇO
-  ========================= */
+      case "READY_FOR_SECURE_SIGNING":
+        return "Pronta para assinatura segura.";
 
-  if (
-    !validateTronAddress(address)
-  ) {
+      case "PROCESSING":
+        return "Retirada em processamento.";
+
+      case "BROADCASTED":
+        return "Transação transmitida para a TRON.";
+
+      case "COMPLETED":
+        return "Retirada confirmada na TRON.";
+
+      case "FAILED":
+        return "A retirada falhou.";
+
+      default:
+        return "Estado: " + status;
+    }
+  }
+
+  async function requestWithdrawal() {
+
+    const addressInput =
+      document.getElementById("withdrawalAddress");
+
+    const amountInput =
+      document.getElementById("withdrawalAmount");
+
+    const button =
+      document.getElementById("withdrawalButton");
+
+    const message =
+      document.getElementById("withdrawalMessage");
+
+    if (
+      !addressInput ||
+      !amountInput ||
+      !button ||
+      !message
+    ) {
+      console.error("Elementos da retirada não encontrados.");
+      return;
+    }
+
+    const address =
+      addressInput.value.trim();
+
+    const amount =
+      amountInput.value.trim();
+
+    if (!validateTronAddress(address)) {
+      message.textContent =
+        "Endereço TRON inválido.";
+      return;
+    }
+
+    if (!/^\d+(\.\d{1,6})?$/.test(amount)) {
+      message.textContent =
+        "Informe um valor USDT válido, com até 6 casas decimais.";
+      return;
+    }
+
+    const numericAmount = Number(amount);
+
+    if (
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0
+    ) {
+      message.textContent =
+        "Informe um valor USDT válido.";
+      return;
+    }
+
+    if (numericAmount > CONFIG.maxAmount) {
+      message.textContent =
+        "O valor máximo por retirada é 1.000.000 USDT.";
+      return;
+    }
+
+    button.disabled = true;
 
     message.textContent =
-      "Endereço TRON inválido.";
+      "A criar solicitação de retirada...";
 
-    return;
+    try {
 
-  }
-
-
-  /* =========================
-     VALIDAR VALOR
-  ========================= */
-
-  if (
-    !/^\d+(\.\d{1,6})?$/.test(
-      amount
-    )
-  ) {
-
-    message.textContent =
-      "Informe um valor USDT válido, com até 6 casas decimais.";
-
-    return;
-
-  }
-
-
-  const numericAmount =
-    Number(amount);
-
-
-  if (
-    !Number.isFinite(numericAmount) ||
-    numericAmount <= 0
-  ) {
-
-    message.textContent =
-      "Informe um valor USDT válido.";
-
-    return;
-
-  }
-
-
-  /* =========================
-     LIMITE
-  ========================= */
-
-  if (
-    numericAmount >
-    WITHDRAWAL_CONFIG.maxAmount
-  ) {
-
-    message.textContent =
-      "O valor máximo por retirada é 1.000.000 USDT.";
-
-    return;
-
-  }
-
-
-  /* =========================
-     PROCESSAMENTO
-  ========================= */
-
-  button.disabled = true;
-
-  message.textContent =
-    "A criar solicitação de retirada...";
-
-
-  try {
-
-    const response =
-      await fetch(
-        WITHDRAWAL_CONFIG.apiWithdrawal,
+      const response = await fetch(
+        CONFIG.api,
         {
-
           method: "POST",
 
           headers: {
@@ -292,178 +183,127 @@ async function requestWithdrawal() {
           },
 
           body: JSON.stringify({
-
-            destination_address:
-              address,
-
-            amount:
-              amount
-
+            destination_address: address,
+            amount: amount
           })
-
         }
       );
 
+      let data;
 
-    const data =
-      await response.json();
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(
+          "O servidor devolveu uma resposta inválida."
+        );
+      }
 
+      if (
+        !response.ok ||
+        !data ||
+        !data.success
+      ) {
+        throw new Error(
+          data?.error ||
+          "Não foi possível criar a retirada."
+        );
+      }
 
-    if (
-      !response.ok ||
-      !data.success
-    ) {
+      const withdrawal =
+        data.withdrawal || data;
 
-      throw new Error(
-        data.error ||
-        "Não foi possível criar a retirada."
-      );
+      const withdrawalId =
+        withdrawal.withdrawal_id ||
+        data.withdrawal_id ||
+        "";
 
-    }
-
-
-    const withdrawal =
-      data.withdrawal || {};
-
-
-    const withdrawalId =
-      withdrawal.withdrawal_id ||
-      data.withdrawal_id ||
-      "";
-
-
-    const status =
-      String(
-        withdrawal.status ||
-        data.status ||
-        "PENDING"
-      ).toUpperCase();
-
-
-    const statusText =
-      withdrawalStatusText(
-        status
-      );
-
-
-    const txHash =
-      withdrawal.tx_hash ||
-      data.tx_hash ||
-      "";
-
-
-    let txHtml = "";
-
-
-    if (txHash) {
-
-      txHtml =
-        "<br><strong>TXID:</strong> " +
-        escapeHtml(txHash);
-
-    }
-
-
-    /* =========================
-       RESULTADO
-    ========================= */
-
-    message.innerHTML =
-
-      "<strong>Retirada registada.</strong><br>" +
-
-      "ID: " +
-      escapeHtml(
-        withdrawalId
-      ) +
-
-      "<br>" +
-
-      "Rede: " +
-      WITHDRAWAL_CONFIG.network +
-
-      "<br>" +
-
-      "Ativo: " +
-      WITHDRAWAL_CONFIG.asset +
-
-      "<br>" +
-
-      "Destino: " +
-      escapeHtml(
-        address
-      ) +
-
-      "<br>" +
-
-      "Valor: " +
-      escapeHtml(
+      const status =
         String(
-          withdrawal.amount ??
-          amount
-        )
-      ) +
+          withdrawal.status ||
+          data.status ||
+          "PENDING"
+        ).toUpperCase();
 
-      " USDT" +
+      const statusText =
+        getStatusText(status);
 
-      "<br>" +
+      const txHash =
+        withdrawal.tx_hash ||
+        data.tx_hash ||
+        "";
 
-      "Estado: " +
-      escapeHtml(
-        statusText
-      ) +
+      let txHtml = "";
 
-      txHtml;
+      if (txHash) {
+        txHtml =
+          "<br><strong>TXID:</strong> " +
+          escapeHtml(txHash);
+      }
 
+      message.innerHTML =
+        "<strong>Retirada registada.</strong><br>" +
 
-    addressInput.value = "";
+        "ID: " +
+        escapeHtml(withdrawalId) +
 
-    amountInput.value = "";
+        "<br>Rede: " +
+        CONFIG.network +
 
+        "<br>Ativo: " +
+        CONFIG.asset +
 
-  } catch (error) {
+        "<br>Destino: " +
+        escapeHtml(address) +
 
-    console.error(
-      "USDTMZ WITHDRAWAL ERROR:",
-      error
-    );
+        "<br>Valor: " +
+        escapeHtml(
+          String(
+            withdrawal.amount ?? amount
+          )
+        ) +
 
+        " USDT" +
 
-    message.innerHTML =
+        "<br>Estado: " +
+        escapeHtml(statusText) +
 
-      "<strong>Erro:</strong><br>" +
+        txHtml;
 
-      escapeHtml(
-        error.message ||
-        "Não foi possível criar a retirada."
+      addressInput.value = "";
+      amountInput.value = "";
+
+    } catch (error) {
+
+      console.error(
+        "USDTMZ WITHDRAWAL ERROR:",
+        error
       );
 
-  } finally {
+      message.innerHTML =
+        "<strong>Erro:</strong><br>" +
+        escapeHtml(
+          error?.message ||
+          "Não foi possível criar a retirada."
+        );
 
-    button.disabled = false;
+    } finally {
+
+      button.disabled = false;
+    }
+  }
+
+  const button =
+    document.getElementById("withdrawalButton");
+
+  if (button) {
+
+    button.addEventListener(
+      "click",
+      requestWithdrawal
+    );
 
   }
 
-}
-
-
-/* =========================
-   BOTÃO
-========================= */
-
-const withdrawalButton =
-  document.getElementById(
-    "withdrawalButton"
-  );
-
-
-if (withdrawalButton) {
-
-  withdrawalButton.addEventListener(
-    "click",
-    requestWithdrawal
-  );
-
-}
-
+})();
 </script>
