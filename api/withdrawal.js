@@ -45,4 +45,19 @@ function formatUsdtAmount(raw) {
       .padStart(6, "0");
 
   return `${whole}.${decimal}`;
+}import { neon } from "@neondatabase/serverless";
+import { TronWeb } from "tronweb";
+
+// constantes...
+
+// funções auxiliares
+function parseUsdtAmount(value) {
+  // ...
 }
+
+function formatUsdtAmount(raw) {
+  // ...
+}
+
+// processWithdrawal()
+// handler da API...
