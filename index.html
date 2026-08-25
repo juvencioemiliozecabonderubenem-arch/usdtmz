@@ -279,8 +279,9 @@ const CONFIG = {
 
   rate: 64,
 
-  apiWallet:
-    "/api/wallet",
+  apiWithdrawal:
+  "/api/retirada"
+  
 
   apiBlockchain:
     "/api/blockchain",
@@ -842,14 +843,15 @@ async function requestWithdrawal() {
 
           body: JSON.stringify({
 
-            destination_address:
-              address,
+body: JSON.stringify({
 
-            amount:
-              amount
+  address:
+    address,
 
-          })
+  amount:
+    amount
 
+})
         }
       );
 
