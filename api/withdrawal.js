@@ -22,7 +22,9 @@ function parseUsdtAmount(value) {
   }
 
   const [whole, decimal = ""] = text.split(".");
-  const padded = decimal.padEnd(6, "0");
+
+  const padded =
+    decimal.padEnd(USDT_DECIMALS, "0");
 
   const raw =
     BigInt(whole) * 1_000_000n +
@@ -33,7 +35,8 @@ function parseUsdtAmount(value) {
   }
 
   const max =
-    BigInt(MAX_WITHDRAWAL_USDT) * 1_000_000n;
+    BigInt(MAX_WITHDRAWAL_USDT) *
+    1_000_000n;
 
   if (raw > max) {
     return null;
@@ -45,7 +48,8 @@ function parseUsdtAmount(value) {
 function formatUsdtAmount(raw) {
   const value = BigInt(raw);
 
-  const whole = value / 1_000_000n;
+  const whole =
+    value / 1_000_000n;
 
   const decimal =
     (value % 1_000_000n)
@@ -56,117 +60,237 @@ function formatUsdtAmount(raw) {
 }
 
 export default async function handler(req, res) {
+
   if (req.method !== "POST") {
+
     return res.status(405).json({
       success: false,
       error: "Método não permitido."
     });
+
   }
 
   try {
+
     if (!process.env.DATABASE_URL) {
+
       return res.status(500).json({
         success: false,
         error: "DATABASE_URL não configurada."
       });
+
     }
 
-    const body = req.body || {};
+    const body =
+      req.body || {};
 
     const address =
-      String(body.address || "").trim();
+      String(
+        body.address || ""
+      ).trim();
 
     const amount =
       body.amount;
 
+
+    /* =========================
+       VALIDAR ENDEREÇO
+    ========================= */
+
     if (!isValidTronAddress(address)) {
+
       return res.status(400).json({
         success: false,
         error: "Endereço TRON inválido."
       });
+
     }
+
+
+    /* =========================
+       VALIDAR VALOR
+    ========================= */
 
     const rawAmount =
       parseUsdtAmount(amount);
 
     if (rawAmount === null) {
+
       return res.status(400).json({
         success: false,
         error:
           "Valor USDT inválido. Use até 6 casas decimais."
       });
+
     }
+
 
     const amountFormatted =
       formatUsdtAmount(rawAmount);
 
-    /*
-     * IMPORTANTE:
-     * Nesta etapa não existe transmissão para a TRON.
-     * Nenhuma chave privada é usada.
-     */
+
+    /* =========================
+       IDENTIFICADORES
+    ========================= */
+
+    const withdrawalId =
+      "WD-" +
+      Date.now()
+        .toString(36)
+        .toUpperCase();
 
     const orderId =
-      "WD-" +
-      Date.now().toString(36).toUpperCase();
+      withdrawalId;
+
+
+    /* =========================
+       CRIAR RETIRADA
+    ========================= */
 
     const result = await sql`
+
       INSERT INTO withdrawals (
-        order_id,
-        address,
+
+        withdrawal_id,
+
+        destination_address,
+
+        asset,
+
+        network,
+
         amount,
-        status
+
+        status,
+
+        tx_hash,
+
+        order_id
+
       )
+
       VALUES (
-        ${orderId},
+
+        ${withdrawalId},
+
         ${address},
+
+        'USDT',
+
+        'TRON',
+
         ${amountFormatted},
-        'PENDING'
+
+        'PENDING',
+
+        NULL,
+
+        ${orderId}
+
       )
+
       RETURNING
+
         id,
-        order_id,
-        address,
+
+        withdrawal_id,
+
+        destination_address,
+
+        asset,
+
+        network,
+
         amount,
-        status
+
+        status,
+
+        tx_hash,
+
+        order_id,
+
+        created_at
+
     `;
 
-    const withdrawal = result[0];
+
+    const withdrawal =
+      result[0];
+
+
+    /* =========================
+       RESPOSTA
+    ========================= */
 
     return res.status(201).json({
+
       success: true,
 
       message:
         "Pedido de retirada recebido e aguardando autorização.",
 
       withdrawal: {
-        id: withdrawal.id,
-        orderId: withdrawal.order_id,
-        address: withdrawal.address,
-        amount: withdrawal.amount,
 
-        asset: "USDT",
-        network: "TRON Mainnet",
-        standard: "TRC-20",
-        contract: USDT_CONTRACT,
+        id:
+          withdrawal.id,
 
-        status: withdrawal.status,
+        withdrawal_id:
+          withdrawal.withdrawal_id,
 
-        broadcasted: false,
-        txid: null
+        address:
+          withdrawal.destination_address,
+
+        destination_address:
+          withdrawal.destination_address,
+
+        amount:
+          withdrawal.amount,
+
+        asset:
+          withdrawal.asset,
+
+        network:
+          "TRON Mainnet",
+
+        standard:
+          "TRC-20",
+
+        contract:
+          USDT_CONTRACT,
+
+        status:
+          withdrawal.status,
+
+        tx_hash:
+          withdrawal.tx_hash,
+
+        broadcasted:
+          false,
+
+        created_at:
+          withdrawal.created_at
+
       }
+
     });
 
+
   } catch (error) {
+
     console.error(
       "USDTMZ WITHDRAWAL ERROR:",
-      error?.message || error
+      error
     );
 
     return res.status(500).json({
+
       success: false,
+
       error:
         "Erro interno ao criar o pedido de retirada."
+
     });
+
   }
+
 }
