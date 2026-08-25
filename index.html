@@ -1,12 +1,7 @@
-<!DOCTYPE html>
-<html lang="pt">
+<!DOCTYPE html><html lang="pt">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>USDTMZ</title>
-
-  <style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">  <title>USDTMZ</title>  <style>
     body {
       font-family: Arial, sans-serif;
       margin: 0;
@@ -21,14 +16,15 @@
     }
 
     section {
-      background: white;
+      background: #fff;
       padding: 20px;
       margin-bottom: 18px;
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0,0,0,.08);
     }
 
-    h1, h2 {
+    h1,
+    h2 {
       margin-top: 0;
     }
 
@@ -54,6 +50,14 @@
       margin-top: 15px;
       cursor: pointer;
       font-weight: bold;
+      background: #111;
+      color: #fff;
+      border: none;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
 
     .balance {
@@ -65,6 +69,7 @@
       margin-top: 12px;
       padding: 10px;
       border-radius: 8px;
+      line-height: 1.5;
     }
 
     .orders-message {
@@ -72,201 +77,154 @@
       line-height: 1.6;
     }
 
-    .payment-option {
-      margin-top: 10px;
+    .rate {
+      font-weight: bold;
     }
-  </style>
-</head>
-
-<body>
-
-<main>
-
-  <h1>USDTMZ</h1>
-
-  <!-- =========================
+  </style></head><body><main>  <h1>USDTMZ</h1>  <!-- =========================
        SALDO
-  ========================= -->
+  ========================= -->  <section id="balanceSection"><h2>Meu saldo</h2>
 
-  <section id="balanceSection">
+<div class="balance">
+  <span id="usdtBalance">--</span> USDT
+</div>
 
-    <h2>Meu saldo</h2>
+<p>
+  Saldo real disponibilizado pelo sistema.
+</p>
 
-    <div class="balance">
-      <span id="usdtBalance">--</span> USDT
-    </div>
+<button
+  type="button"
+  id="refreshBalanceButton"
+>
+  Atualizar saldo
+</button>
 
-    <p>
-      Saldo real disponibilizado pelo sistema.
-    </p>
+<div
+  id="balanceMessage"
+  class="message"
+  aria-live="polite"
+></div>
 
-    <button
-      type="button"
-      id="refreshBalanceButton"
-    >
-      Atualizar saldo
-    </button>
+  </section>  <!-- =========================
+       CONVERSOR / COMPRA
+  ========================= -->  <section id="converterSection"><h2>Comprar USDT</h2>
 
-    <div
-      id="balanceMessage"
-      class="message"
-      aria-live="polite"
-    ></div>
+<label for="mznAmount">
+  Valor em MZN
+</label>
 
-  </section>
+<input
+  id="mznAmount"
+  type="number"
+  min="0"
+  step="1"
+  placeholder="Ex.: 500"
+>
 
+<p class="rate">
+  Taxa: 50 MZN = 1 USDT
+</p>
 
-  <!-- =========================
-       CONVERSOR
-  ========================= -->
+<p>
+  Você receberá:
+  <strong>
+    <span id="usdtPreview">0</span> USDT
+  </strong>
+</p>
 
-  <section id="converterSection">
-
-    <h2>Comprar USDT</h2>
-
-    <label for="mznAmount">
-      Valor em MZN
-    </label>
-
-    <input
-      id="mznAmount"
-      type="number"
-      min="0"
-      step="0.01"
-      placeholder="Ex.: 640"
-    >
-
-    <p>
-      Taxa de referência:
-      <strong>1 USDT = 64 MZN</strong>
-    </p>
-
-    <p>
-      Você receberá:
-      <strong>
-        <span id="usdtPreview">0.000000</span>
-        USDT
-      </strong>
-    </p>
-
-  </section>
-
-
-  <!-- =========================
+  </section>  <!-- =========================
        MÉTODO DE PAGAMENTO
-  ========================= -->
+  ========================= -->  <section id="paymentSection"><h2>Forma de pagamento</h2>
 
-  <section id="paymentSection">
+<label for="paymentMethod">
+  Escolha o método
+</label>
 
-    <h2>Forma de pagamento</h2>
+<select id="paymentMethod">
 
-    <label for="paymentMethod">
-      Escolha o método
-    </label>
+  <option value="">
+    Selecionar
+  </option>
 
-    <select id="paymentMethod">
+  <option value="mpesa">
+    M-Pesa
+  </option>
 
-      <option value="">
-        Selecionar
-      </option>
+  <option value="emola">
+    e-Mola
+  </option>
 
-      <option value="mpesa">
-        M-Pesa
-      </option>
+</select>
 
-      <option value="emola">
-        e-Mola
-      </option>
+<label for="paymentPhone">
+  Número de telefone
+</label>
 
-    </select>
+<input
+  id="paymentPhone"
+  type="tel"
+  placeholder="Ex.: 84xxxxxxx"
+  autocomplete="off"
+>
 
+<button
+  type="button"
+  id="buyButton"
+>
+  Comprar USDT
+</button>
 
-    <label for="paymentPhone">
-      Número de telefone
-    </label>
+<div
+  id="paymentMessage"
+  class="message"
+  aria-live="polite"
+></div>
 
-    <input
-      id="paymentPhone"
-      type="tel"
-      placeholder="Ex.: 84xxxxxxx"
-      autocomplete="off"
-    >
-
-
-    <button
-      type="button"
-      id="buyButton"
-    >
-      Comprar USDT
-    </button>
-
-
-    <div
-      id="paymentMessage"
-      class="message"
-      aria-live="polite"
-    ></div>
-
-  </section>
-
-
-  <!-- =========================
+  </section>  <!-- =========================
        RETIRADA USDT
-  ========================= -->
+  ========================= -->  <section id="withdrawalSection"><h2>Retirada USDT</h2>
 
-  <section id="withdrawalSection">
+<p>
+  Retirada de USDT através da rede TRON TRC-20.
+</p>
 
-    <h2>Retirada USDT</h2>
+<label for="withdrawalAddress">
+  Endereço TRON
+</label>
 
-    <p>
-      Retirada de USDT através da rede TRON TRC-20.
-    </p>
+<input
+  id="withdrawalAddress"
+  type="text"
+  placeholder="Endereço TRON TRC-20"
+  autocomplete="off"
+>
 
-    <label for="withdrawalAddress">
-      Endereço TRON
-    </label>
+<label for="withdrawalAmount">
+  Valor USDT
+</label>
 
-    <input
-      id="withdrawalAddress"
-      type="text"
-      placeholder="Endereço TRON TRC-20"
-      autocomplete="off"
-    >
+<input
+  id="withdrawalAmount"
+  type="number"
+  min="0"
+  step="0.000001"
+  placeholder="Ex.: 2"
+>
 
+<button
+  type="button"
+  id="withdrawalButton"
+>
+  Solicitar retirada
+</button>
 
-    <label for="withdrawalAmount">
-      Valor USDT
-    </label>
+<div
+  id="withdrawalMessage"
+  class="orders-message"
+  aria-live="polite"
+></div>
 
-    <input
-      id="withdrawalAmount"
-      type="number"
-      min="0"
-      step="0.000001"
-      placeholder="Ex.: 2"
-    >
-
-
-    <button
-      type="button"
-      id="withdrawalButton"
-    >
-      Solicitar retirada
-    </button>
-
-
-    <div
-      id="withdrawalMessage"
-      class="orders-message"
-      aria-live="polite"
-    ></div>
-
-  </section>
-
-</main>
-
-
-<script>
+  </section></main><script>
 
 "use strict";
 
@@ -274,16 +232,79 @@
 /* =========================
    CONFIGURAÇÃO
 ========================= */
+
 const CONFIG = {
 
-  rate: 64,
+  /* 500 MZN = 10 USDT */
+  rate: 50,
 
   apiWallet: "/api/wallet",
+
   apiBlockchain: "/api/blockchain",
+
   apiOrder: "/api/order",
+
   apiWithdrawal: "/api/withdrawal"
 
 };
+
+
+/* =========================
+   FORMATAÇÃO USDT
+========================= */
+
+function formatUsdt(value) {
+
+  const number =
+    Number(value);
+
+  if (
+    !Number.isFinite(number)
+  ) {
+    return "0";
+  }
+
+  return number
+    .toFixed(6)
+    .replace(/\.?0+$/, "");
+
+}
+
+
+/* =========================
+   ESCAPAR HTML
+========================= */
+
+function escapeHtml(value) {
+
+  return String(value)
+
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
+
+}
 
 
 /* =========================
@@ -291,16 +312,26 @@ const CONFIG = {
 ========================= */
 
 const mznAmount =
-  document.getElementById("mznAmount");
+  document.getElementById(
+    "mznAmount"
+  );
 
 const usdtPreview =
-  document.getElementById("usdtPreview");
+  document.getElementById(
+    "usdtPreview"
+  );
 
 
 function updateConverter() {
 
+  if (!mznAmount || !usdtPreview) {
+    return;
+  }
+
   const mzn =
-    Number(mznAmount.value || 0);
+    Number(
+      mznAmount.value || 0
+    );
 
   if (
     !Number.isFinite(mzn) ||
@@ -308,16 +339,17 @@ function updateConverter() {
   ) {
 
     usdtPreview.textContent =
-      "0.000000";
+      "0";
 
     return;
+
   }
 
   const usdt =
     mzn / CONFIG.rate;
 
   usdtPreview.textContent =
-    usdt.toFixed(6);
+    formatUsdt(usdt);
 
 }
 
@@ -355,6 +387,11 @@ async function loadBalance() {
   balanceElement.textContent =
     "...";
 
+  if (message) {
+    message.textContent =
+      "A consultar saldo...";
+  }
+
   try {
 
     const response =
@@ -362,14 +399,33 @@ async function loadBalance() {
         CONFIG.apiWallet,
         {
           method: "GET",
+
           headers: {
-            "Accept": "application/json"
-          }
+            "Accept":
+              "application/json"
+          },
+
+          cache: "no-store"
+
         }
       );
 
-    const data =
-      await response.json();
+
+    let data;
+
+    try {
+
+      data =
+        await response.json();
+
+    } catch {
+
+      throw new Error(
+        "O servidor devolveu uma resposta inválida."
+      );
+
+    }
+
 
     if (
       !response.ok ||
@@ -383,12 +439,14 @@ async function loadBalance() {
 
     }
 
+
     const balance =
       data.balance ??
       data.usdt_balance ??
       data.usdt ??
       data.wallet?.balance ??
       data.wallet?.usdt_balance;
+
 
     if (
       balance === undefined ||
@@ -401,8 +459,10 @@ async function loadBalance() {
 
     }
 
+
     balanceElement.textContent =
-      Number(balance).toFixed(6);
+      formatUsdt(balance);
+
 
     if (message) {
 
@@ -410,6 +470,7 @@ async function loadBalance() {
         "Saldo atualizado.";
 
     }
+
 
   } catch (error) {
 
@@ -424,7 +485,7 @@ async function loadBalance() {
     if (message) {
 
       message.textContent =
-        error.message ||
+        error?.message ||
         "Saldo indisponível.";
 
     }
@@ -492,7 +553,10 @@ async function buyUsdt() {
     phoneInput.value.trim();
 
 
-  if (!mzn || Number(mzn) <= 0) {
+  if (
+    !mzn ||
+    Number(mzn) <= 0
+  ) {
 
     message.textContent =
       "Informe o valor em MZN.";
@@ -526,7 +590,8 @@ async function buyUsdt() {
     Number(mzn) / CONFIG.rate;
 
 
-  button.disabled = true;
+  button.disabled =
+    true;
 
   message.textContent =
     "A criar pedido de pagamento...";
@@ -543,6 +608,9 @@ async function buyUsdt() {
 
           headers: {
             "Content-Type":
+              "application/json",
+
+            "Accept":
               "application/json"
           },
 
@@ -599,13 +667,16 @@ async function buyUsdt() {
     message.innerHTML =
       "<strong>Pedido criado.</strong><br>" +
       "Método: " +
-      escapeHtml(method.toUpperCase()) +
+      escapeHtml(
+        method.toUpperCase()
+      ) +
       "<br>Valor: " +
       escapeHtml(mzn) +
-      " MZN<br>USDT: " +
+      " MZN → " +
       escapeHtml(
-        usdt.toFixed(6)
-      );
+        formatUsdt(usdt)
+      ) +
+      " USDT";
 
 
   } catch (error) {
@@ -616,12 +687,13 @@ async function buyUsdt() {
     );
 
     message.textContent =
-      error.message ||
+      error?.message ||
       "Erro ao criar pedido.";
 
   } finally {
 
-    button.disabled = false;
+    button.disabled =
+      false;
 
   }
 
@@ -645,51 +717,30 @@ if (buyButton) {
 
 
 /* =========================
-   RETIRADA
+   VALIDAÇÃO TRON
 ========================= */
 
-function validateTronAddress(address) {
+function validateTronAddress(
+  address
+) {
 
-  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
-    String(address || "").trim()
-  );
-
-}
-
-
-function escapeHtml(value) {
-
-  return String(value)
-
-    .replaceAll(
-      "&",
-      "&amp;"
-    )
-
-    .replaceAll(
-      "<",
-      "&lt;"
-    )
-
-    .replaceAll(
-      ">",
-      "&gt;"
-    )
-
-    .replaceAll(
-      '"',
-      "&quot;"
-    )
-
-    .replaceAll(
-      "'",
-      "&#039;"
+  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/
+    .test(
+      String(
+        address || ""
+      ).trim()
     );
 
 }
 
 
-function getWithdrawalStatusText(status) {
+/* =========================
+   STATUS DA RETIRADA
+========================= */
+
+function getWithdrawalStatusText(
+  status
+) {
 
   switch (status) {
 
@@ -721,6 +772,10 @@ function getWithdrawalStatusText(status) {
 
 }
 
+
+/* =========================
+   RETIRADA
+========================= */
 
 async function requestWithdrawal() {
 
@@ -767,9 +822,8 @@ async function requestWithdrawal() {
 
 
   if (
-    !/^\d+(\.\d{1,6})?$/.test(
-      amount
-    )
+    !/^\d+(\.\d{1,6})?$/
+      .test(amount)
   ) {
 
     message.textContent =
@@ -812,7 +866,8 @@ async function requestWithdrawal() {
   }
 
 
-  button.disabled = true;
+  button.disabled =
+    true;
 
   message.textContent =
     "A criar solicitação de retirada...";
@@ -829,20 +884,22 @@ async function requestWithdrawal() {
 
           headers: {
             "Content-Type":
+              "application/json",
+
+            "Accept":
               "application/json"
           },
 
           body: JSON.stringify({
 
-body: JSON.stringify({
+            address:
+              address,
 
-  address:
-    address,
+            amount:
+              amount
 
-  amount:
-    amount
+          })
 
-})
         }
       );
 
@@ -921,7 +978,7 @@ body: JSON.stringify({
 
       "<br>Valor: " +
       escapeHtml(
-        String(
+        formatUsdt(
           withdrawal.amount ??
           amount
         )
@@ -957,6 +1014,10 @@ body: JSON.stringify({
 
     amountInput.value =
       "";
+
+
+    /* Atualiza o saldo depois da retirada */
+    loadBalance();
 
 
   } catch (error) {
@@ -1003,9 +1064,9 @@ if (withdrawalButton) {
    INICIALIZAÇÃO
 ========================= */
 
+updateConverter();
+
 loadBalance();
 
-</script>
-
-</body>
+</script></body>
 </html>
