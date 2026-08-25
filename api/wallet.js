@@ -44,8 +44,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const apiKey =
-      process.env.TRONGRID_API_KEY;
+    const apiKey = process.env.TRONGRID_API_KEY;
 
     if (!apiKey) {
       return res.status(500).json({
@@ -88,7 +87,14 @@ export default async function handler(req, res) {
       return res.status(502).json({
         success: false,
         error:
-          "Não foi possível consultar o saldo na TRON Mainnet."
+          "TRONGrid HTTP " +
+          response.status +
+          ": " +
+          String(
+            data?.Error ||
+            data?.error ||
+            "erro desconhecido"
+          )
       });
     }
 
@@ -150,19 +156,4 @@ export default async function handler(req, res) {
         "Erro ao consultar a carteira."
     });
   }
-}if (!response.ok) {
-  console.error(
-    "TRONGRID ERROR:",
-    response.status,
-    data
-  );
-
-  return res.status(502).json({
-    success: false,
-    error:
-      "TRONGrid HTTP " +
-      response.status +
-      ": " +
-      String(data?.Error || data?.error || "erro desconhecido")
-  });
 }
