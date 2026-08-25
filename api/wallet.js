@@ -54,9 +54,8 @@ export default async function handler(req, res) {
     }
 
     const url =
-      `${TRON_HOST}/v1/accounts/${WALLET_ADDRESS}/tokens` +
-      `?only_confirmed=true` +
-      `&contract_address=${USDT_CONTRACT}`;
+  `${TRON_HOST}/v1/accounts/${WALLET_ADDRESS}/trc20/balance` +
+  `?contract_address=${USDT_CONTRACT}`;
 
     const response = await fetch(url, {
       method: "GET",
