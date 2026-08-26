@@ -664,19 +664,135 @@ async function buyUsdt() {
     }
 
 
-    message.innerHTML =
-      "<strong>Pedido criado.</strong><br>" +
-      "Método: " +
-      escapeHtml(
-        method.toUpperCase()
-      ) +
-      "<br>Valor: " +
-      escapeHtml(mzn) +
-      " MZN → " +
-      escapeHtml(
-        formatUsdt(usdt)
-      ) +
-      " USDT";
+    const order =
+  data.order || {};
+
+const orderId =
+  order.order_id;
+
+if (!orderId) {
+  throw new Error(
+    "O pedido foi criado, mas não recebeu order_id."
+  );
+}
+
+
+/*
+ * =========================
+ * M-PESA
+ * =========================
+ */
+
+if (method === "mpesa") {
+
+  message.textContent =
+    "Pedido criado. A iniciar pagamento M-Pesa...";
+
+  const mpesaResponse =
+    await fetch(
+      "/api/mpesa",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+
+          "Accept":
+            "application/json"
+        },
+
+        body: JSON.stringify({
+          order_id: orderId
+        })
+      }
+    );
+
+
+  let mpesaData;
+
+  try {
+
+    mpesaData =
+      await mpesaResponse.json();
+
+  } catch {
+
+    throw new Error(
+      "O servidor M-Pesa devolveu uma resposta inválida."
+    );
+
+  }
+
+
+  if (
+    !mpesaResponse.ok ||
+    !mpesaData.success
+  ) {
+
+    throw new Error(
+      mpesaData?.error ||
+      "Não foi possível iniciar o pagamento M-Pesa."
+    );
+
+  }
+
+
+  const mpesaOrder =
+    mpesaData.order ||
+    {};
+
+
+  message.innerHTML =
+    "<strong>Pagamento M-Pesa iniciado.</strong><br>" +
+
+    "Valor: " +
+    escapeHtml(mzn) +
+    " MZN → " +
+
+    escapeHtml(
+      formatUsdt(usdt)
+    ) +
+    " USDT<br><br>" +
+
+    "Verifique o seu telefone M-Pesa e confirme o pagamento.<br>" +
+
+    "Estado: " +
+
+    escapeHtml(
+      mpesaOrder.status ||
+      "PROCESSING"
+    );
+
+  return;
+
+}
+
+
+/*
+ * =========================
+ * E-MOLA
+ * =========================
+ */
+
+message.innerHTML =
+  "<strong>Pedido criado.</strong><br>" +
+
+  "Método: " +
+  escapeHtml(
+    method.toUpperCase()
+  ) +
+
+  "<br>Valor: " +
+  escapeHtml(mzn) +
+
+  " MZN → " +
+
+  escapeHtml(
+    formatUsdt(usdt)
+  ) +
+
+  " USDT";
 
 
   } catch (error) {
