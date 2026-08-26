@@ -1,31 +1,58 @@
 import { neon } from "@neondatabase/serverless";
 import crypto from "crypto";
 
+/*
+ * =========================================================
+ * USDTMZ - M-PESA C2B
+ * Compatível com a tabela orders existente
+ * =========================================================
+ *
+ * ENVIRONMENT:
+ *
+ * MPESA_ENV=sandbox
+ * ou
+ * MPESA_ENV=production
+ *
+ * Variáveis necessárias:
+ *
+ * DATABASE_URL
+ * MPESA_API_KEY
+ * MPESA_PUBLIC_KEY
+ * MPESA_SERVICE_PROVIDER_CODE
+ * MPESA_ORIGIN
+ *
+ * =========================================================
+ */
+
 const MPESA_ENV =
   String(process.env.MPESA_ENV || "sandbox")
     .trim()
     .toLowerCase();
 
+const IS_PRODUCTION =
+  MPESA_ENV === "production" ||
+  MPESA_ENV === "live";
+
 const MPESA_HOST =
-  MPESA_ENV === "production"
+  IS_PRODUCTION
     ? "api.vm.co.mz"
     : "api.sandbox.vm.co.mz";
 
-const MPESA_PORT =
-  MPESA_ENV === "production"
-    ? 18352
-    : 18352;
+const MPESA_PORT = 18352;
 
 const MPESA_PATH =
   "/ipg/v1x/c2bPayment/singleStage/";
 
 const MPESA_ORIGIN =
-  process.env.MPESA_ORIGIN ||
-  "developer.mpesa.vm.co.mz";
+  String(
+    process.env.MPESA_ORIGIN ||
+      "developer.mpesa.vm.co.mz"
+  ).trim();
 
 const SERVICE_PROVIDER_CODE =
   String(
-    process.env.MPESA_SERVICE_PROVIDER_CODE || ""
+    process.env.MPESA_SERVICE_PROVIDER_CODE ||
+      ""
   ).trim();
 
 const API_KEY =
@@ -41,15 +68,16 @@ const PUBLIC_KEY =
 const MIN_AMOUNT = 1;
 const MAX_AMOUNT = 1000000;
 
+const REQUEST_TIMEOUT = 30000;
+
 
 /*
  * =========================================================
- * RESPOSTA JSON
+ * JSON
  * =========================================================
  */
 
 function json(res, status, data) {
-
   res.setHeader(
     "Content-Type",
     "application/json"
@@ -61,7 +89,7 @@ function json(res, status, data) {
 
 /*
  * =========================================================
- * NORMALIZAR TELEFONE
+ * TELEFONE
  * =========================================================
  */
 
@@ -70,14 +98,17 @@ function normalizePhone(value) {
   let phone =
     String(value || "")
       .trim()
-      .replace(/\s+/g, "");
+      .replace(/\s+/g, "")
+      .replace(/-/g, "");
 
   if (phone.startsWith("+")) {
     phone = phone.substring(1);
   }
 
   if (phone.startsWith("0")) {
-    phone = "258" + phone.substring(1);
+    phone =
+      "258" +
+      phone.substring(1);
   }
 
   if (!/^258\d{9}$/.test(phone)) {
@@ -90,15 +121,16 @@ function normalizePhone(value) {
 
 /*
  * =========================================================
- * REFERÊNCIAS
+ * REFERÊNCIA ALEATÓRIA
+ * Máximo permitido: 20 caracteres
  * =========================================================
  */
 
-function createReference(prefix = "USDTMZ") {
+function createThirdPartyReference() {
 
   const random =
     crypto
-      .randomBytes(4)
+      .randomBytes(6)
       .toString("hex")
       .toUpperCase();
 
@@ -107,17 +139,78 @@ function createReference(prefix = "USDTMZ") {
       .toString(36)
       .toUpperCase();
 
-  return `${prefix}-${time}-${random}`;
+  return (
+    "MZ" +
+    time +
+    random
+  ).substring(0, 20);
 }
 
 
 /*
  * =========================================================
- * TOKEN M-PESA
+ * PUBLIC KEY
+ * =========================================================
+ */
+
+function formatPublicKey(value) {
+
+  let key =
+    String(value || "")
+      .trim();
+
+  if (!key) {
+    throw new Error(
+      "MPESA_PUBLIC_KEY não configurada."
+    );
+  }
+
+  /*
+   * Caso já venha em PEM.
+   */
+
+  if (
+    key.includes(
+      "-----BEGIN PUBLIC KEY-----"
+    )
+  ) {
+    return key;
+  }
+
+  /*
+   * Caso o portal forneça somente
+   * o conteúdo Base64.
+   */
+
+  key =
+    key.replace(/\s+/g, "");
+
+  return (
+    "-----BEGIN PUBLIC KEY-----\n" +
+    key +
+    "\n-----END PUBLIC KEY-----"
+  );
+}
+
+
+/*
+ * =========================================================
+ * GERAR BEARER TOKEN
  *
- * O portal utiliza API Key + Public Key.
- * O Bearer não deve ser colocado manualmente no código.
+ * M-Pesa Mozambique:
  *
+ * API Key
+ *    ↓
+ * RSA PKCS1
+ *    ↓
+ * Public Key
+ *    ↓
+ * Base64
+ *    ↓
+ * Bearer
+ *
+ * A API Key nunca é enviada diretamente
+ * para o cliente.
  * =========================================================
  */
 
@@ -135,48 +228,35 @@ function generateBearerToken() {
     );
   }
 
-  let key = PUBLIC_KEY.trim();
-
-  /*
-   * Aceita a chave com ou sem os marcadores PEM.
-   */
-
-  if (!key.includes("BEGIN PUBLIC KEY")) {
-
-    key =
-      `-----BEGIN PUBLIC KEY-----\n` +
-      key.replace(/\s+/g, "") +
-      `\n-----END PUBLIC KEY-----`;
-
-  }
-
-  /*
-   * RSA-OAEP com SHA-1 é usado pelo SDK
-   * compatível com o portal M-Pesa.
-   */
+  const publicKey =
+    formatPublicKey(
+      PUBLIC_KEY
+    );
 
   const encrypted =
     crypto.publicEncrypt(
       {
-        key,
+        key: publicKey,
 
         padding:
-          crypto.constants.RSA_PKCS1_OAEP_PADDING,
-
-        oaepHash: "sha1"
-
+          crypto.constants.RSA_PKCS1_PADDING
       },
 
-      Buffer.from(API_KEY, "utf8")
+      Buffer.from(
+        API_KEY,
+        "utf8"
+      )
     );
 
-  return encrypted.toString("base64");
+  return encrypted.toString(
+    "base64"
+  );
 }
 
 
 /*
  * =========================================================
- * CHAMADA M-PESA
+ * CHAMAR M-PESA
  * =========================================================
  */
 
@@ -191,10 +271,10 @@ async function callMpesa(payload) {
   const controller =
     new AbortController();
 
-  const timeout =
+  const timer =
     setTimeout(
       () => controller.abort(),
-      30000
+      REQUEST_TIMEOUT
     );
 
   try {
@@ -206,7 +286,6 @@ async function callMpesa(payload) {
           method: "POST",
 
           headers: {
-
             "Content-Type":
               "application/json",
 
@@ -214,8 +293,10 @@ async function callMpesa(payload) {
               `Bearer ${bearer}`,
 
             "Origin":
-              MPESA_ORIGIN
+              MPESA_ORIGIN,
 
+            "Accept":
+              "application/json"
           },
 
           body:
@@ -223,24 +304,29 @@ async function callMpesa(payload) {
 
           signal:
             controller.signal
-
         }
       );
 
     const text =
       await response.text();
 
-    let data;
+    let data = {};
 
-    try {
-      data =
-        text
-          ? JSON.parse(text)
-          : {};
-    } catch {
-      data = {
-        raw: text
-      };
+    if (text) {
+
+      try {
+
+        data =
+          JSON.parse(text);
+
+      } catch {
+
+        data = {
+          raw: text
+        };
+
+      }
+
     }
 
     return {
@@ -252,9 +338,40 @@ async function callMpesa(payload) {
 
   } finally {
 
-    clearTimeout(timeout);
+    clearTimeout(timer);
 
   }
+}
+
+
+/*
+ * =========================================================
+ * EXTRAIR CAMPO
+ * =========================================================
+ */
+
+function firstValue(
+  object,
+  names
+) {
+
+  for (const name of names) {
+
+    if (
+      object &&
+      object[name] !== undefined &&
+      object[name] !== null
+    ) {
+
+      return String(
+        object[name]
+      ).trim();
+
+    }
+
+  }
+
+  return "";
 
 }
 
@@ -265,9 +382,23 @@ async function callMpesa(payload) {
  * =========================================================
  */
 
-export default async function handler(req, res) {
+export default async function handler(
+  req,
+  res
+) {
+
+  /*
+   * -------------------------------------------------------
+   * SOMENTE POST
+   * -------------------------------------------------------
+   */
 
   if (req.method !== "POST") {
+
+    res.setHeader(
+      "Allow",
+      "POST"
+    );
 
     return json(
       res,
@@ -275,18 +406,19 @@ export default async function handler(req, res) {
       {
         success: false,
         error:
-          "Método não permitido."
+          "Método não permitido. Use POST."
       }
     );
 
   }
 
+
   try {
 
     /*
-     * =====================================================
+     * -----------------------------------------------------
      * CONFIGURAÇÃO
-     * =====================================================
+     * -----------------------------------------------------
      */
 
     if (!process.env.DATABASE_URL) {
@@ -347,9 +479,9 @@ export default async function handler(req, res) {
 
 
     /*
-     * =====================================================
+     * -----------------------------------------------------
      * BODY
-     * =====================================================
+     * -----------------------------------------------------
      */
 
     const body =
@@ -362,16 +494,6 @@ export default async function handler(req, res) {
         ""
       ).trim();
 
-
-    /*
-     * =====================================================
-     * ORDER_ID OBRIGATÓRIO
-     * =====================================================
-     *
-     * O frontend não deve mandar valor diferente
-     * da ordem existente.
-     *
-     */
 
     if (!orderId) {
 
@@ -389,9 +511,9 @@ export default async function handler(req, res) {
 
 
     /*
-     * =====================================================
+     * -----------------------------------------------------
      * BANCO
-     * =====================================================
+     * -----------------------------------------------------
      */
 
     const sql =
@@ -401,7 +523,7 @@ export default async function handler(req, res) {
 
 
     /*
-     * Buscar ordem existente.
+     * Buscar pedido
      */
 
     const rows =
@@ -431,6 +553,7 @@ export default async function handler(req, res) {
 
       `;
 
+
     if (!rows.length) {
 
       return json(
@@ -445,20 +568,25 @@ export default async function handler(req, res) {
 
     }
 
+
     const order =
       rows[0];
 
 
     /*
-     * =====================================================
-     * VALIDAR MÉTODO DE PAGAMENTO
-     * =====================================================
+     * -----------------------------------------------------
+     * PAGAMENTO TEM DE SER MPESA
+     * -----------------------------------------------------
      */
 
-    if (
-      String(order.payment || "")
-        .toLowerCase() !== "mpesa"
-    ) {
+    const payment =
+      String(
+        order.payment || ""
+      )
+        .trim()
+        .toLowerCase();
+
+    if (payment !== "mpesa") {
 
       return json(
         res,
@@ -466,7 +594,7 @@ export default async function handler(req, res) {
         {
           success: false,
           error:
-            "Este pedido não é um pagamento M-Pesa."
+            "Este pedido não usa M-Pesa."
         }
       );
 
@@ -474,14 +602,21 @@ export default async function handler(req, res) {
 
 
     /*
-     * =====================================================
-     * NÃO REPETIR PAGAMENTO
-     * =====================================================
+     * -----------------------------------------------------
+     * NÃO PAGAR DUAS VEZES
+     * -----------------------------------------------------
      */
 
+    const currentStatus =
+      String(
+        order.status || ""
+      )
+        .trim()
+        .toUpperCase();
+
+
     if (
-      String(order.status || "")
-        .toUpperCase() === "PAID"
+      currentStatus === "PAID"
     ) {
 
       return json(
@@ -489,14 +624,16 @@ export default async function handler(req, res) {
         409,
         {
           success: false,
+
           error:
-            "Este pedido já foi pago.",
+            "Este pedido já está pago.",
+
           order: {
             order_id:
               order.order_id,
 
             status:
-              order.status,
+              currentStatus,
 
             mpesa_transaction_id:
               order.mpesa_transaction_id
@@ -508,13 +645,76 @@ export default async function handler(req, res) {
 
 
     /*
-     * =====================================================
-     * VALIDAR VALOR
-     * =====================================================
+     * Se já estiver PROCESSING,
+     * não criamos outra cobrança.
+     */
+
+    if (
+      currentStatus === "PROCESSING"
+    ) {
+
+      return json(
+        res,
+        409,
+        {
+          success: false,
+
+          error:
+            "Este pagamento já está em processamento.",
+
+          order: {
+            order_id:
+              order.order_id,
+
+            status:
+              currentStatus,
+
+            mpesa_transaction_id:
+              order.mpesa_transaction_id
+          }
+        }
+      );
+
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * OPERAÇÃO
+     * -----------------------------------------------------
+     */
+
+    const operation =
+      String(
+        order.operation || ""
+      )
+        .trim()
+        .toLowerCase();
+
+    if (operation !== "buy") {
+
+      return json(
+        res,
+        400,
+        {
+          success: false,
+          error:
+            "Operação inválida para pagamento M-Pesa."
+        }
+      );
+
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * VALOR
+     * -----------------------------------------------------
      */
 
     const amount =
       Number(order.amount);
+
 
     if (
       !Number.isFinite(amount) ||
@@ -536,13 +736,16 @@ export default async function handler(req, res) {
 
 
     /*
-     * =====================================================
+     * -----------------------------------------------------
      * TELEFONE
-     * =====================================================
+     * -----------------------------------------------------
      */
 
     const phone =
-      normalizePhone(order.phone);
+      normalizePhone(
+        order.phone
+      );
+
 
     if (!phone) {
 
@@ -560,59 +763,51 @@ export default async function handler(req, res) {
 
 
     /*
-     * =====================================================
-     * REFERÊNCIAS
-     * =====================================================
-     */
-
-    /*
-     * TransactionReference:
-     * máximo de 20 caracteres segundo
-     * a documentação fornecida.
+     * -----------------------------------------------------
+     * TRANSACTION REFERENCE
+     *
+     * Máximo: 20 caracteres
+     * -----------------------------------------------------
      */
 
     const transactionReference =
       String(order.order_id)
-        .replace(/[^A-Za-z0-9]/g, "")
+        .replace(
+          /[^A-Za-z0-9]/g,
+          ""
+        )
         .substring(0, 20);
 
-    const thirdPartyReference =
-      createReference("MZ")
-        .replace(/[^A-Za-z0-9]/g, "")
-        .substring(0, 20);
+
+    if (!transactionReference) {
+
+      return json(
+        res,
+        400,
+        {
+          success: false,
+          error:
+            "Não foi possível criar a referência da transação."
+        }
+      );
+
+    }
 
 
     /*
-     * =====================================================
-     * MARCAR COMO PROCESSING
-     * =====================================================
-     *
-     * Não marcamos PAID aqui.
+     * -----------------------------------------------------
+     * THIRD PARTY REFERENCE
+     * -----------------------------------------------------
      */
 
-    await sql`
-
-      UPDATE orders
-
-      SET
-
-        status = 'PROCESSING',
-
-        updated_at = CURRENT_TIMESTAMP
-
-      WHERE
-
-        order_id = ${orderId}
-
-        AND status = 'PENDING'
-
-    `;
+    const thirdPartyReference =
+      createThirdPartyReference();
 
 
     /*
-     * =====================================================
-     * PAYLOAD M-PESA
-     * =====================================================
+     * -----------------------------------------------------
+     * PAYLOAD
+     * -----------------------------------------------------
      */
 
     const payload = {
@@ -636,9 +831,11 @@ export default async function handler(req, res) {
 
 
     /*
-     * =====================================================
-     * ENVIAR PARA M-PESA
-     * =====================================================
+     * -----------------------------------------------------
+     * ENVIAR AO M-PESA
+     *
+     * Só mudamos o estado depois da resposta.
+     * -----------------------------------------------------
      */
 
     const mpesa =
@@ -646,42 +843,72 @@ export default async function handler(req, res) {
         payload
       );
 
+
     const data =
       mpesa.data || {};
 
+
+    /*
+     * -----------------------------------------------------
+     * RESPOSTA M-PESA
+     * -----------------------------------------------------
+     */
+
     const responseCode =
-      String(
-        data.output_ResponseCode ||
-        data.output_responseCode ||
-        ""
-      ).trim();
+      firstValue(
+        data,
+        [
+          "output_ResponseCode",
+          "output_responseCode",
+          "output_ResponseCode"
+        ]
+      );
+
 
     const responseDescription =
-      String(
-        data.output_ResponseDesc ||
-        data.output_ResponseDescription ||
-        data.output_responseDesc ||
-        ""
-      ).trim();
+      firstValue(
+        data,
+        [
+          "output_ResponseDesc",
+          "output_ResponseDescription",
+          "output_responseDesc"
+        ]
+      );
+
 
     const transactionId =
-      String(
-        data.output_TransactionID ||
-        data.output_TransactionId ||
-        ""
-      ).trim();
+      firstValue(
+        data,
+        [
+          "output_TransactionID",
+          "output_TransactionId",
+          "output_transactionID"
+        ]
+      );
+
 
     const conversationId =
-      String(
-        data.output_ConversationID ||
-        ""
-      ).trim();
+      firstValue(
+        data,
+        [
+          "output_ConversationID",
+          "output_ConversationId",
+          "output_conversationID"
+        ]
+      );
 
 
     /*
-     * =====================================================
-     * SUCESSO M-PESA
-     * =====================================================
+     * -----------------------------------------------------
+     * INS-0
+     * -----------------------------------------------------
+     *
+     * O pedido foi aceito/processado pela API.
+     *
+     * Não transformamos automaticamente em PAID
+     * apenas por receber INS-0, porque a documentação
+     * também suporta fluxo assíncrono.
+     * -----------------------------------------------------
      */
 
     if (
@@ -690,28 +917,9 @@ export default async function handler(req, res) {
       responseCode === "INS-0"
     ) {
 
-      /*
-       * Guardamos o Transaction ID.
-       *
-       * NÃO alteramos para PAID automaticamente
-       * se a resposta indicar que a operação ainda
-       * está em processamento.
-       */
-
-      const transactionStatus =
-        String(
-          data.output_ResponseTransactionStatus ||
-          ""
-        ).toLowerCase();
-
-      const isCompleted =
-        transactionStatus === "completed" ||
-        transactionStatus === "complete";
-
-      const newStatus =
-        isCompleted
-          ? "PAID"
-          : "PROCESSING";
+      const savedTransactionId =
+        transactionId ||
+        thirdPartyReference;
 
 
       await sql`
@@ -720,15 +928,16 @@ export default async function handler(req, res) {
 
         SET
 
-          status = ${newStatus},
+          status = 'PROCESSING',
 
           mpesa_transaction_id =
-            ${transactionId || thirdPartyReference},
+            ${savedTransactionId},
 
           updated_at =
             CURRENT_TIMESTAMP
 
-        WHERE order_id = ${orderId}
+        WHERE
+          order_id = ${orderId}
 
       `;
 
@@ -741,17 +950,23 @@ export default async function handler(req, res) {
           success: true,
 
           message:
-            isCompleted
-              ? "Pagamento M-Pesa confirmado."
-              : "Pagamento M-Pesa iniciado. Aguardando confirmação.",
+            "Pagamento M-Pesa iniciado. Aguardando confirmação.",
+
+          environment:
+            IS_PRODUCTION
+              ? "production"
+              : "sandbox",
 
           order: {
+
+            id:
+              order.id,
 
             order_id:
               order.order_id,
 
             status:
-              newStatus,
+              "PROCESSING",
 
             amount:
               Number(order.amount),
@@ -761,11 +976,10 @@ export default async function handler(req, res) {
                 .toFixed(6),
 
             mpesa_transaction_id:
-              transactionId ||
-              thirdPartyReference,
+              savedTransactionId,
 
             conversation_id:
-              conversationId,
+              conversationId || null,
 
             third_party_reference:
               thirdPartyReference
@@ -779,9 +993,9 @@ export default async function handler(req, res) {
 
 
     /*
-     * =====================================================
+     * -----------------------------------------------------
      * FALHA
-     * =====================================================
+     * -----------------------------------------------------
      */
 
     await sql`
@@ -795,26 +1009,55 @@ export default async function handler(req, res) {
         updated_at =
           CURRENT_TIMESTAMP
 
-      WHERE order_id = ${orderId}
+      WHERE
+        order_id = ${orderId}
 
     `;
 
 
+    /*
+     * -----------------------------------------------------
+     * MAPEAR STATUS HTTP
+     * -----------------------------------------------------
+     */
+
+    let statusCode =
+      Number(
+        mpesa.httpStatus
+      );
+
+
+    if (
+      !Number.isInteger(statusCode) ||
+      statusCode < 400 ||
+      statusCode > 599
+    ) {
+
+      statusCode = 400;
+
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * RESPOSTA DE ERRO
+     * -----------------------------------------------------
+     */
+
     return json(
       res,
-      mpesa.httpStatus >= 400
-        ? mpesa.httpStatus
-        : 400,
+      statusCode,
       {
 
         success: false,
 
         error:
           responseDescription ||
-          "O M-Pesa não processou o pagamento.",
+          "O M-Pesa não aceitou o pagamento.",
 
         code:
-          responseCode || null,
+          responseCode ||
+          null,
 
         order: {
 
@@ -840,8 +1083,9 @@ export default async function handler(req, res) {
 
 
     /*
-     * Não revelamos credenciais,
-     * tokens ou resposta interna ao cliente.
+     * Nunca enviamos API Key,
+     * Public Key, Bearer ou detalhes
+     * internos para o navegador.
      */
 
     return json(
@@ -852,7 +1096,7 @@ export default async function handler(req, res) {
         success: false,
 
         error:
-          "Erro interno ao processar M-Pesa."
+          "Erro interno ao processar o pagamento M-Pesa."
 
       }
     );
