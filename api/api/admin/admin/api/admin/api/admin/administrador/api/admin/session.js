@@ -1,83 +1,85 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { neon } from "@neondatabase/serverless";
+import crypto from "node:crypto";
+
+const sql = neon(process.env.DATABASE_URL);
+
+const SESSION_COOKIE = "usdtmz_admin_session";
+const SESSION_MAX_AGE = 8 * 60 * 60 * 1000;
 
 function json(res, status, data) {
   res.setHeader("Content-Type", "application/json");
   return res.status(status).json(data);
 }
 
-function getCookie(req, name) {
-  const cookieHeader = req.headers.cookie || "";
+function parseCookies(cookieHeader) {
+  const cookies = {};
 
-  const cookies = cookieHeader
-    .split(";")
-    .map(cookie => cookie.trim());
-
-  for (const cookie of cookies) {
-    const separator = cookie.indexOf("=");
-
-    if (separator === -1) continue;
-
-    const key = cookie
-      .slice(0, separator)
-      .trim();
-
-    const value = cookie
-      .slice(separator + 1)
-      .trim();
-
-    if (key === name) {
-      return value;
-    }
+  if (!cookieHeader) {
+    return cookies;
   }
 
-  return null;
+  for (const part of cookieHeader.split(";")) {
+    const index = part.indexOf("=");
+
+    if (index === -1) continue;
+
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+
+    cookies[key] = value;
+  }
+
+  return cookies;
 }
 
-function verifySession(token, secret) {
+function verifySession(token) {
   try {
-    if (!token || !secret) {
+    if (!token) {
       return null;
     }
 
-    const parts = token.split(".");
+    const separator = token.lastIndexOf(".");
 
-    if (parts.length !== 2) {
+    if (separator <= 0) {
       return null;
     }
 
-    const encoded = parts[0];
-    const receivedSignature = parts[1];
+    const encoded = token.slice(0, separator);
+    const signature = token.slice(separator + 1);
+
+    if (!encoded || !signature) {
+      return null;
+    }
+
+    const secret =
+      process.env.ADMIN_SESSION_SECRET;
+
+    if (!secret) {
+      return null;
+    }
 
     const expectedSignature =
-      createHmac(
-        "sha256",
-        secret
-      )
+      crypto
+        .createHmac("sha256", secret)
         .update(encoded)
         .digest("base64url");
 
-    const receivedBuffer =
-      Buffer.from(
-        receivedSignature,
-        "utf8"
-      );
+    const suppliedBuffer =
+      Buffer.from(signature, "utf8");
 
     const expectedBuffer =
-      Buffer.from(
-        expectedSignature,
-        "utf8"
-      );
+      Buffer.from(expectedSignature, "utf8");
 
     if (
-      receivedBuffer.length !==
+      suppliedBuffer.length !==
       expectedBuffer.length
     ) {
       return null;
     }
 
     if (
-      !timingSafeEqual(
-        receivedBuffer,
+      !crypto.timingSafeEqual(
+        suppliedBuffer,
         expectedBuffer
       )
     ) {
@@ -86,25 +88,16 @@ function verifySession(token, secret) {
 
     const payload =
       JSON.parse(
-        Buffer.from(
-          encoded,
-          "base64url"
-        ).toString("utf8")
+        Buffer
+          .from(encoded, "base64url")
+          .toString("utf8")
       );
 
-    if (
-      !payload ||
-      !payload.id ||
-      !payload.email ||
-      !payload.exp
-    ) {
+    if (!payload?.id || !payload?.exp) {
       return null;
     }
 
-    if (
-      Date.now() >=
-      Number(payload.exp)
-    ) {
+    if (Date.now() > Number(payload.exp)) {
       return null;
     }
 
@@ -114,7 +107,7 @@ function verifySession(token, secret) {
 
     console.error(
       "SESSION VERIFY ERROR:",
-      error
+      error?.message || error
     );
 
     return null;
@@ -124,68 +117,102 @@ function verifySession(token, secret) {
 export default async function handler(req, res) {
 
   if (req.method !== "GET") {
-
     return json(res, 405, {
       success: false,
+      authenticated: false,
       error: "Método não permitido."
     });
-
   }
 
-  const secret =
-    process.env.ADMIN_SESSION_SECRET;
+  if (!process.env.DATABASE_URL) {
+    return json(res, 500, {
+      success: false,
+      authenticated: false,
+      error: "DATABASE_URL não configurada."
+    });
+  }
 
-  if (!secret) {
+  if (!process.env.ADMIN_SESSION_SECRET) {
+    return json(res, 500, {
+      success: false,
+      authenticated: false,
+      error: "ADMIN_SESSION_SECRET não configurada."
+    });
+  }
+
+  try {
+
+    const cookies =
+      parseCookies(
+        req.headers.cookie
+      );
+
+    const token =
+      cookies[SESSION_COOKIE];
+
+    const session =
+      verifySession(token);
+
+    if (!session) {
+
+      return json(res, 401, {
+        success: false,
+        authenticated: false,
+        error: "Sessão inválida ou expirada."
+      });
+    }
+
+    const result =
+      await sql`
+        SELECT
+          id,
+          email,
+          active
+        FROM admin_users
+        WHERE id = ${session.id}
+        LIMIT 1
+      `;
+
+    if (!result.length) {
+
+      return json(res, 401, {
+        success: false,
+        authenticated: false,
+        error: "Administrador não encontrado."
+      });
+    }
+
+    const admin = result[0];
+
+    if (!admin.active) {
+
+      return json(res, 403, {
+        success: false,
+        authenticated: false,
+        error: "Conta administrativa desativada."
+      });
+    }
+
+    return json(res, 200, {
+      success: true,
+      authenticated: true,
+      admin: {
+        id: admin.id,
+        email: admin.email
+      }
+    });
+
+  } catch (error) {
+
+    console.error(
+      "ADMIN SESSION ERROR:",
+      error?.message || error
+    );
 
     return json(res, 500, {
       success: false,
-      error:
-        "ADMIN_SESSION_SECRET não configurada."
+      authenticated: false,
+      error: "Erro interno ao verificar a sessão."
     });
-
   }
-
-  const token =
-    getCookie(
-      req,
-      "usdtmz_admin_session"
-    );
-
-  if (!token) {
-
-    return json(res, 200, {
-      success: true,
-      authenticated: false
-    });
-
-  }
-
-  const session =
-    verifySession(
-      token,
-      secret
-    );
-
-  if (!session) {
-
-    return json(res, 200, {
-      success: true,
-      authenticated: false
-    });
-
-  }
-
-  return json(res, 200, {
-
-    success: true,
-
-    authenticated: true,
-
-    admin: {
-      id: session.id,
-      email: session.email
-    }
-
-  });
-
 }
