@@ -1,17 +1,11 @@
-<!DOCTYPE html>
-<html lang="pt">
-<head>
+<!DOCTYPE html><html lang="pt">
+<head>  <meta charset="UTF-8"><meta
+name="viewport"
+content="width=device-width, initial-scale=1.0"
 
-  <meta charset="UTF-8">
+«»
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
-
-  <title>USDTMZ</title>
-
-  <style>
+  <title>USDTMZ</title>  <style>
 
     * {
       box-sizing: border-box;
@@ -123,269 +117,220 @@
       display: none;
     }
 
-  </style>
+  </style></head><body><main>  <header><h1>USDTMZ</h1>
 
-</head>
+<nav>
 
-<body>
+  <button
+    type="button"
+    id="aboutButton"
+  >
+    Sobre nós
+  </button>
 
-<main>
+  <button
+    type="button"
+    id="logoutButton"
+  >
+    Sair
+  </button>
 
-  <header>
+</nav>
 
-    <h1>USDTMZ</h1>
-
-    <nav>
-
-      <button
-        type="button"
-        id="aboutButton"
-      >
-        Sobre nós
-      </button>
-
-      <button
-        type="button"
-        id="logoutButton"
-      >
-        Sair
-      </button>
-
-    </nav>
-
-  </header>
-
-
-  <!-- =========================
+  </header>  <!-- =========================
        SALDO
-  ========================= -->
+  ========================= -->  <section id="balanceSection"><h2>Meu saldo</h2>
 
-  <section id="balanceSection">
+<div class="balance">
 
-    <h2>Meu saldo</h2>
+  <span id="usdtBalance">
+    --
+  </span>
 
-    <div class="balance">
+  USDT
 
-      <span id="usdtBalance">
-        --
-      </span>
+</div>
 
-      USDT
+<p>
+  Saldo real disponibilizado pelo sistema.
+</p>
 
-    </div>
+<button
+  type="button"
+  id="refreshBalanceButton"
+>
+  Atualizar saldo
+</button>
 
-    <p>
-      Saldo real disponibilizado pelo sistema.
-    </p>
+<div
+  id="balanceMessage"
+  class="message"
+  aria-live="polite"
+></div>
 
-    <button
-      type="button"
-      id="refreshBalanceButton"
-    >
-      Atualizar saldo
-    </button>
-
-    <div
-      id="balanceMessage"
-      class="message"
-      aria-live="polite"
-    ></div>
-
-  </section>
-
-
-  <!-- =========================
+  </section>  <!-- =========================
        SOBRE NÓS
-  ========================= -->
-
-  <section
+  ========================= -->  <section
     id="aboutSection"
     class="hidden"
-  >
+  ><h2>Sobre nós</h2>
 
-    <h2>Sobre nós</h2>
+<div class="about">
 
-    <div class="about">
+  <p>
+    A USDTMZ é uma plataforma destinada
+    à compra e gestão de USDT através
+    de métodos de pagamento disponíveis
+    para os seus clientes.
+  </p>
 
-      <p>
-        A USDTMZ é uma plataforma destinada
-        à compra e gestão de USDT através
-        de métodos de pagamento disponíveis
-        para os seus clientes.
-      </p>
+  <p>
+    Os pagamentos e as operações são
+    processados de acordo com os serviços
+    e autorizações disponibilizados pelos
+    respectivos operadores e parceiros.
+  </p>
 
-      <p>
-        Os pagamentos e as operações são
-        processados de acordo com os serviços
-        e autorizações disponibilizados pelos
-        respectivos operadores e parceiros.
-      </p>
+  <p>
+    As transações ficam sujeitas à
+    confirmação antes de qualquer
+    disponibilização de saldo.
+  </p>
 
-      <p>
-        As transações ficam sujeitas à
-        confirmação antes de qualquer
-        disponibilização de saldo.
-      </p>
+</div>
 
-    </div>
-
-  </section>
-
-
-  <!-- =========================
+  </section>  <!-- =========================
        COMPRA
-  ========================= -->
+  ========================= -->  <section id="converterSection"><h2>Comprar USDT</h2>
 
-  <section id="converterSection">
+<label for="mznAmount">
+  Valor em MZN
+</label>
 
-    <h2>Comprar USDT</h2>
+<input
+  id="mznAmount"
+  type="number"
+  min="20"
+  max="40000"
+  step="1"
+  placeholder="Ex.: 500"
+  inputmode="numeric"
+>
 
-    <label for="mznAmount">
-      Valor em MZN
-    </label>
+<p class="rate">
+  Taxa: 50 MZN = 1 USDT
+</p>
 
-    <input
-      id="mznAmount"
-      type="number"
-      min="1"
-      step="1"
-      placeholder="Ex.: 500"
-      inputmode="decimal"
-    >
+<p>
+  Você receberá:
 
-    <p class="rate">
-      Taxa: 50 MZN = 1 USDT
-    </p>
+  <strong>
+    <span id="usdtPreview">
+      0
+    </span>
 
-    <p>
-      Você receberá:
+    USDT
+  </strong>
 
-      <strong>
-        <span id="usdtPreview">
-          0
-        </span>
+</p>
 
-        USDT
-      </strong>
-
-    </p>
-
-  </section>
-
-
-  <!-- =========================
+  </section>  <!-- =========================
        PAGAMENTO
-  ========================= -->
+  ========================= -->  <section id="paymentSection"><h2>Forma de pagamento</h2>
 
-  <section id="paymentSection">
+<label for="paymentMethod">
+  Escolha o método
+</label>
 
-    <h2>Forma de pagamento</h2>
+<select id="paymentMethod">
 
-    <label for="paymentMethod">
-      Escolha o método
-    </label>
+  <option value="">
+    Selecionar
+  </option>
 
-    <select id="paymentMethod">
+  <option value="mpesa">
+    M-Pesa
+  </option>
 
-      <option value="">
-        Selecionar
-      </option>
+  <option value="emola">
+    e-Mola
+  </option>
 
-      <option value="mpesa">
-        M-Pesa
-      </option>
+</select>
 
-      <option value="emola">
-        e-Mola
-      </option>
+<label for="paymentPhone">
+  Número de telefone
+</label>
 
-    </select>
+<input
+  id="paymentPhone"
+  type="tel"
+  placeholder="Ex.: 84xxxxxxx"
+  autocomplete="tel"
+  inputmode="tel"
+>
 
-    <label for="paymentPhone">
-      Número de telefone
-    </label>
+<button
+  type="button"
+  id="buyButton"
+>
+  Comprar USDT
+</button>
 
-    <input
-      id="paymentPhone"
-      type="tel"
-      placeholder="Ex.: 84xxxxxxx"
-      autocomplete="tel"
-      inputmode="tel"
-    >
+<div
+  id="paymentMessage"
+  class="message"
+  aria-live="polite"
+></div>
 
-    <button
-      type="button"
-      id="buyButton"
-    >
-      Comprar USDT
-    </button>
-
-    <div
-      id="paymentMessage"
-      class="message"
-      aria-live="polite"
-    ></div>
-
-  </section>
-
-
-  <!-- =========================
+  </section>  <!-- =========================
        RETIRADA
-  ========================= -->
+  ========================= -->  <section id="withdrawalSection"><h2>Retirada USDT</h2>
 
-  <section id="withdrawalSection">
+<p>
+  Retirada de USDT através da rede
+  TRON TRC-20.
+</p>
 
-    <h2>Retirada USDT</h2>
+<label for="withdrawalAddress">
+  Endereço TRON
+</label>
 
-    <p>
-      Retirada de USDT através da rede
-      TRON TRC-20.
-    </p>
+<input
+  id="withdrawalAddress"
+  type="text"
+  placeholder="Endereço TRON TRC-20"
+  autocomplete="off"
+  spellcheck="false"
+>
 
-    <label for="withdrawalAddress">
-      Endereço TRON
-    </label>
+<label for="withdrawalAmount">
+  Valor USDT
+</label>
 
-    <input
-      id="withdrawalAddress"
-      type="text"
-      placeholder="Endereço TRON TRC-20"
-      autocomplete="off"
-      spellcheck="false"
-    >
+<input
+  id="withdrawalAmount"
+  type="number"
+  min="0.000001"
+  step="0.000001"
+  placeholder="Ex.: 2"
+  inputmode="decimal"
+>
 
-    <label for="withdrawalAmount">
-      Valor USDT
-    </label>
+<button
+  type="button"
+  id="withdrawalButton"
+>
+  Solicitar retirada
+</button>
 
-    <input
-      id="withdrawalAmount"
-      type="number"
-      min="0.000001"
-      step="0.000001"
-      placeholder="Ex.: 2"
-      inputmode="decimal"
-    >
+<div
+  id="withdrawalMessage"
+  class="message"
+  aria-live="polite"
+></div>
 
-    <button
-      type="button"
-      id="withdrawalButton"
-    >
-      Solicitar retirada
-    </button>
-
-    <div
-      id="withdrawalMessage"
-      class="message"
-      aria-live="polite"
-    ></div>
-
-  </section>
-
-</main>
-
-
-<script>
+  </section></main><script>
 
 "use strict";
 
@@ -406,6 +351,9 @@ const CONFIG = {
 
   apiOrder:
     "/api/order",
+
+  apiPayment:
+    "/api/payment",
 
   apiWithdrawal:
     "/api/withdrawal"
@@ -508,26 +456,14 @@ if (logoutButton) {
     "click",
     function() {
 
-      /*
-       * O site público não mantém
-       * sessão administrativa.
-       *
-       * O botão apenas limpa os
-       * dados locais da sessão.
-       */
-
       try {
-
         sessionStorage.clear();
-
       } catch {}
 
       try {
-
         localStorage.removeItem(
           "usdtmz_session"
         );
-
       } catch {}
 
       window.location.reload();
@@ -747,7 +683,7 @@ if (refreshBalanceButton) {
 
 
 /* =========================
-   COMPRA
+   COMPRA + PAGAR
 ========================= */
 
 async function buyUsdt() {
@@ -790,20 +726,31 @@ async function buyUsdt() {
     phoneInput.value.trim();
 
 
+  /* =========================
+     VALIDAÇÕES
+  ========================= */
+
   if (
     !mzn ||
-    Number(mzn) <= 0
+    !Number.isInteger(
+      Number(mzn)
+    ) ||
+    Number(mzn) < 20 ||
+    Number(mzn) > 40000
   ) {
 
     message.textContent =
-      "Informe o valor em MZN.";
+      "Informe um valor inteiro entre 20 e 40.000 MZN.";
 
     return;
 
   }
 
 
-  if (!method) {
+  if (
+    method !== "mpesa" &&
+    method !== "emola"
+  ) {
 
     message.textContent =
       "Escolha M-Pesa ou e-Mola.";
@@ -831,21 +778,17 @@ async function buyUsdt() {
     true;
 
   message.textContent =
-    "A criar pedido de pagamento...";
+    "A criar pedido...";
 
 
   try {
 
-    /*
-     * IMPORTANTE:
-     *
-     * A compra usa /api/order.
-     *
-     * /api/admin/pedidos é
-     * exclusivamente administrativa.
-     */
+    /* =========================
+       ETAPA 1
+       CRIAR PEDIDO
+    ========================= */
 
-    const response =
+    const orderResponse =
       await fetch(
         CONFIG.apiOrder,
         {
@@ -879,30 +822,30 @@ async function buyUsdt() {
       );
 
 
-    let data;
+    let orderData;
 
     try {
 
-      data =
-        await response.json();
+      orderData =
+        await orderResponse.json();
 
     } catch {
 
       throw new Error(
-        "Resposta inválida do servidor."
+        "Resposta inválida ao criar o pedido."
       );
 
     }
 
 
     if (
-      !response.ok ||
-      !data ||
-      data.success === false
+      !orderResponse.ok ||
+      !orderData ||
+      orderData.success === false
     ) {
 
       throw new Error(
-        data?.error ||
+        orderData?.error ||
         "Não foi possível criar o pedido."
       );
 
@@ -910,41 +853,166 @@ async function buyUsdt() {
 
 
     const order =
-      data.order ||
-      {};
+      orderData.order ||
+      orderData;
 
 
     const orderId =
       order.order_id ||
+      order.id ||
       "";
 
 
-    const calculatedUsdt =
-      order.usdt_amount ??
-      usdt;
+    if (!orderId) {
 
+      throw new Error(
+        "O servidor criou o pedido, mas não devolveu o order_id."
+      );
+
+    }
+
+
+    /* =========================
+       ETAPA 2
+       PAGAR
+    ========================= */
 
     message.innerHTML =
 
       "<strong>Pedido criado.</strong><br>" +
 
       "Pedido: " +
-      escapeHtml(orderId) +
+      escapeHtml(
+        orderId
+      ) +
+
+      "<br>A iniciar pagamento " +
+
+      escapeHtml(
+        method.toUpperCase()
+      ) +
+
+      "...";
+
+
+    const paymentResponse =
+      await fetch(
+        CONFIG.apiPayment,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            "Accept":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+
+              order_id:
+                orderId,
+
+              phone:
+                phone,
+
+              method:
+                method,
+
+              amount_mzn:
+                Number(mzn)
+
+            })
+        }
+      );
+
+
+    let paymentData;
+
+    try {
+
+      paymentData =
+        await paymentResponse.json();
+
+    } catch {
+
+      throw new Error(
+        "Resposta inválida da API de pagamento."
+      );
+
+    }
+
+
+    if (
+      !paymentResponse.ok ||
+      !paymentData ||
+      paymentData.success === false
+    ) {
+
+      throw new Error(
+        paymentData?.error ||
+        paymentData?.message ||
+        "A Pagar não aceitou o pagamento."
+      );
+
+    }
+
+
+    /* =========================
+       PAGAMENTO CRIADO
+    ========================= */
+
+    const payment =
+      paymentData.payment ||
+      paymentData;
+
+
+    const paymentId =
+      payment.paymentId ||
+      payment.id ||
+      payment.pagar_payment_id ||
+      "";
+
+
+    const paymentStatus =
+      String(
+        payment.status ||
+        "PROCESSING"
+      ).toUpperCase();
+
+
+    /* =========================
+       MOSTRAR RESULTADO
+    ========================= */
+
+    message.innerHTML =
+
+      "<strong>Pagamento iniciado.</strong><br>" +
+
+      "Pedido: " +
+
+      escapeHtml(
+        orderId
+      ) +
 
       "<br>Método: " +
+
       escapeHtml(
         method.toUpperCase()
       ) +
 
       "<br>Valor: " +
-      escapeHtml(mzn) +
+
+      escapeHtml(
+        mzn
+      ) +
 
       " MZN → " +
 
       escapeHtml(
-        formatUsdt(
-          calculatedUsdt
-        )
+        formatUsdt(usdt)
       ) +
 
       " USDT" +
@@ -952,17 +1020,30 @@ async function buyUsdt() {
       "<br>Estado: " +
 
       escapeHtml(
-        order.status ||
-        "PENDING"
+        paymentStatus
       );
 
 
+    if (paymentId) {
+
+      message.innerHTML +=
+
+        "<br>ID pagamento: " +
+
+        escapeHtml(
+          paymentId
+        );
+
+    }
+
+
     /*
-     * O pedido continua PENDING.
+     * NÃO colocamos PAID aqui.
      *
-     * O saldo não é aumentado
-     * simplesmente porque o pedido
-     * foi criado.
+     * A confirmação definitiva
+     * será feita pelo webhook:
+     *
+     * /api/pagar-webhook
      */
 
 
@@ -975,13 +1056,18 @@ async function buyUsdt() {
   } catch (error) {
 
     console.error(
-      "BUY ERROR:",
+      "BUY PAYMENT ERROR:",
       error
     );
 
-    message.textContent =
-      error?.message ||
-      "Erro ao criar pedido.";
+    message.innerHTML =
+
+      "<strong>Erro:</strong><br>" +
+
+      escapeHtml(
+        error?.message ||
+        "Não foi possível iniciar o pagamento."
+      );
 
   } finally {
 
@@ -1256,6 +1342,7 @@ async function requestWithdrawal() {
       "<strong>Retirada registada.</strong><br>" +
 
       "ID: " +
+
       escapeHtml(
         withdrawalId
       ) +
@@ -1265,11 +1352,13 @@ async function requestWithdrawal() {
       "<br>Ativo: USDT TRC-20" +
 
       "<br>Destino: " +
+
       escapeHtml(
         address
       ) +
 
       "<br>Valor: " +
+
       escapeHtml(
         formatUsdt(
           withdrawal.amount ??
@@ -1280,6 +1369,7 @@ async function requestWithdrawal() {
       " USDT" +
 
       "<br>Estado: " +
+
       escapeHtml(
         getWithdrawalStatusText(
           status
@@ -1290,7 +1380,9 @@ async function requestWithdrawal() {
     if (txHash) {
 
       result +=
+
         "<br><strong>TXID:</strong> " +
+
         escapeHtml(
           txHash
         );
@@ -1320,7 +1412,9 @@ async function requestWithdrawal() {
     );
 
     message.innerHTML =
+
       "<strong>Erro:</strong><br>" +
+
       escapeHtml(
         error?.message ||
         "Não foi possível processar a retirada."
@@ -1360,7 +1454,5 @@ updateConverter();
 
 loadBalance();
 
-</script>
-
-</body>
+</script></body>
 </html>
