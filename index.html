@@ -1060,14 +1060,16 @@ async function buyUsdt() {
       error
     );
 
-    message.innerHTML =
+    const errorText =
+  typeof error?.message === "string"
+    ? error.message
+    : error?.message
+      ? JSON.stringify(error.message)
+      : "Não foi possível iniciar o pagamento.";
 
-      "<strong>Erro:</strong><br>" +
-
-      escapeHtml(
-        error?.message ||
-        "Não foi possível iniciar o pagamento."
-      );
+message.innerHTML =
+  "<strong>Erro:</strong><br>" +
+  escapeHtml(errorText);
 
   } finally {
 
