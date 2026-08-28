@@ -3,31 +3,26 @@ import crypto from "node:crypto";
 
 /*
  * =========================================================
- * USDTMZ — PAGAR PAYMENT API — BLOCO 3B
- * =========================================================
- *
+ * USDTMZ — PAYMENT API
  * POST /api/payment
  *
- * Cria uma cobrança M-Pesa/e-Mola na Pagar.
- *
- * FLUXO:
+ * Fluxo:
  *
  * orders.PENDING
  *       ↓
- * Pagar /payments
+ * Pagar API
  *       ↓
  * PROCESSING / PENDING
  *       ↓
- * webhook
+ * webhook da Pagar
  *       ↓
  * PAYMENT_CONFIRMED
  *
  * IMPORTANTE:
- * - Nunca marcamos PAYMENT_CONFIRMED apenas porque a Pagar
- *   respondeu HTTP 202.
- * - O USDT NÃO é enviado neste endpoint.
- * - O saldo da carteira NÃO é alterado neste endpoint.
- * - A confirmação definitiva será feita pelo webhook.
+ * - Nunca considerar HTTP 202 como pagamento confirmado.
+ * - Nunca confiar no valor enviado pelo frontend.
+ * - API Key e Signing Secret ficam somente no servidor.
+ * =========================================================
  */
 
 const API_URL =
@@ -42,8 +37,8 @@ const SIGNING_SECRET =
 
 
 /* =========================================================
- * JSON
- * ========================================================= */
+   JSON
+========================================================= */
 
 function json(res, status, data) {
   res.setHeader(
@@ -58,8 +53,8 @@ function json(res, status, data) {
 
 
 /* =========================================================
- * MÉTODO DE PAGAMENTO
- * ========================================================= */
+   MÉTODO DE PAGAMENTO
+========================================================= */
 
 function normalizeMethod(value) {
 
@@ -81,20 +76,8 @@ function normalizeMethod(value) {
 
 
 /* =========================================================
- * TELEFONE
- * ========================================================= */
-
-function normalizePhone(value) {
-
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, "");
-}
-
-
-/* =========================================================
- * ASSINATURA PAGAR
- * ========================================================= */
+   ASSINATURA PAGAR
+========================================================= */
 
 function createSignature(
   method,
@@ -143,8 +126,8 @@ function createSignature(
 
 
 /* =========================================================
- * PAGAR POST
- * ========================================================= */
+   CHAMADA À PAGAR
+========================================================= */
 
 async function pagarPost(
   pathname,
@@ -181,38 +164,35 @@ async function pagarPost(
     );
 
   const response =
-    await fetch(
-      url,
-      {
-        method: "POST",
+    await fetch(url, {
 
-        headers: {
-          Authorization:
-            "Bearer " + API_KEY,
+      method: "POST",
 
-          "Content-Type":
-            "application/json",
+      headers: {
 
-          Accept:
-            "application/json",
+        Authorization:
+          "Bearer " + API_KEY,
 
-          "Idempotency-Key":
-            idempotencyKey,
+        "Content-Type":
+          "application/json",
 
-          "X-Pagar-Timestamp":
-            auth.timestamp,
+        "Idempotency-Key":
+          idempotencyKey,
 
-          "X-Pagar-Nonce":
-            auth.nonce,
+        "X-Pagar-Timestamp":
+          auth.timestamp,
 
-          "X-Pagar-Signature":
-            auth.signature
-        },
+        "X-Pagar-Nonce":
+          auth.nonce,
 
-        body:
-          rawBody
-      }
-    );
+        "X-Pagar-Signature":
+          auth.signature
+
+      },
+
+      body: rawBody
+
+    });
 
   let data = null;
 
@@ -232,16 +212,14 @@ async function pagarPost(
         "Pedido rejeitado pela Pagar API."
       );
 
-    error.httpStatus =
-      response.status;
-
     error.code =
-      data?.error ||
-      null;
+      data?.error || null;
 
     error.requestId =
-      data?.requestId ||
-      null;
+      data?.requestId || null;
+
+    error.httpStatus =
+      response.status;
 
     throw error;
   }
@@ -251,8 +229,8 @@ async function pagarPost(
 
 
 /* =========================================================
- * HANDLER
- * ========================================================= */
+   HANDLER
+========================================================= */
 
 export default async function handler(
   req,
@@ -260,8 +238,8 @@ export default async function handler(
 ) {
 
   /* -------------------------------------------------------
-   * MÉTODO
-   * ------------------------------------------------------- */
+     MÉTODO
+  ------------------------------------------------------- */
 
   if (req.method !== "POST") {
 
@@ -285,8 +263,8 @@ export default async function handler(
   try {
 
     /* -----------------------------------------------------
-     * CONFIGURAÇÃO
-     * ----------------------------------------------------- */
+       CONFIGURAÇÃO
+    ----------------------------------------------------- */
 
     if (!process.env.DATABASE_URL) {
 
@@ -329,8 +307,8 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * DATABASE
-     * ----------------------------------------------------- */
+       DATABASE
+    ----------------------------------------------------- */
 
     const sql =
       neon(
@@ -339,19 +317,16 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * BODY
-     * ----------------------------------------------------- */
+       BODY
+    ----------------------------------------------------- */
 
     const body =
       req.body || {};
 
-
     const orderId =
       String(
-        body.order_id ||
-        ""
+        body.order_id || ""
       ).trim();
-
 
     const requestedMethod =
       normalizeMethod(
@@ -360,15 +335,9 @@ export default async function handler(
       );
 
 
-    const requestedPhone =
-      normalizePhone(
-        body.phone
-      );
-
-
     /* -----------------------------------------------------
-     * VALIDAR ORDER
-     * ----------------------------------------------------- */
+       VALIDAR ORDER_ID
+    ----------------------------------------------------- */
 
     if (!orderId) {
 
@@ -385,8 +354,8 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * VALIDAR MÉTODO
-     * ----------------------------------------------------- */
+       VALIDAR PAGAMENTO
+    ----------------------------------------------------- */
 
     if (!requestedMethod) {
 
@@ -396,15 +365,15 @@ export default async function handler(
         {
           success: false,
           error:
-            "Método inválido. Use MPESA ou EMOLA."
+            "Método de pagamento inválido. Use MPESA ou EMOLA."
         }
       );
     }
 
 
     /* -----------------------------------------------------
-     * LOCALIZAR ORDER
-     * ----------------------------------------------------- */
+       LOCALIZAR PEDIDO
+    ----------------------------------------------------- */
 
     const orders =
       await sql`
@@ -421,18 +390,13 @@ export default async function handler(
           usdt_amount,
           rate,
           status,
-
           created_at,
-
           mpesa_transaction_id,
-          emola_transaction_id,
-
-          pagar_payment_id,
-
           blockchain_tx_hash,
           wallet_address,
-
-          updated_at
+          updated_at,
+          emola_transaction_id,
+          pagar_payment_id
 
         FROM orders
 
@@ -463,19 +427,17 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * STATUS
-     * ----------------------------------------------------- */
+       ESTADO ATUAL
+    ----------------------------------------------------- */
 
     const currentStatus =
       String(
         order.status || ""
-      )
-        .trim()
-        .toUpperCase();
+      ).toUpperCase();
 
 
     /*
-     * Pedido já confirmado.
+     * Pagamento já confirmado.
      */
 
     if (
@@ -490,18 +452,10 @@ export default async function handler(
           success: false,
           error:
             "Este pedido já possui pagamento confirmado.",
-
-          order: {
-            order_id:
-              order.order_id,
-
-            status:
-              currentStatus,
-
-            pagar_payment_id:
-              order.pagar_payment_id ||
-              null
-          }
+          order_id:
+            order.order_id,
+          status:
+            currentStatus
         }
       );
     }
@@ -513,9 +467,7 @@ export default async function handler(
 
     if (
       currentStatus ===
-        "USDT_SENT" ||
-      currentStatus ===
-        "COMPLETED"
+      "COMPLETED"
     ) {
 
       return json(
@@ -524,30 +476,23 @@ export default async function handler(
         {
           success: false,
           error:
-            "Este pedido já foi processado.",
-
-          order: {
-            order_id:
-              order.order_id,
-
-            status:
-              currentStatus
-          }
+            "Este pedido já foi concluído.",
+          order_id:
+            order.order_id,
+          status:
+            currentStatus
         }
       );
     }
 
 
     /*
-     * Pedido falhado/cancelado não deve
-     * ser reutilizado automaticamente.
+     * Pedido já teve USDT enviado.
      */
 
     if (
       currentStatus ===
-        "FAILED" ||
-      currentStatus ===
-        "CANCELLED"
+      "USDT_SENT"
     ) {
 
       return json(
@@ -556,28 +501,49 @@ export default async function handler(
         {
           success: false,
           error:
-            "Este pedido não pode receber uma nova cobrança.",
+            "O USDT deste pedido já foi enviado.",
+          order_id:
+            order.order_id,
+          status:
+            currentStatus
+        }
+      );
+    }
 
-          order: {
-            order_id:
-              order.order_id,
 
-            status:
-              currentStatus
-          }
+    /*
+     * Cancelado ou falhado precisa de novo pedido.
+     */
+
+    if (
+      currentStatus ===
+      "CANCELLED" ||
+      currentStatus ===
+      "FAILED"
+    ) {
+
+      return json(
+        res,
+        409,
+        {
+          success: false,
+          error:
+            "Este pedido não está disponível para novo pagamento.",
+          order_id:
+            order.order_id,
+          status:
+            currentStatus
         }
       );
     }
 
 
     /* -----------------------------------------------------
-     * VALOR DA BASE DE DADOS
-     * ----------------------------------------------------- */
+       VALOR
+    ----------------------------------------------------- */
 
     const amount =
-      Number(
-        order.amount
-      );
+      Number(order.amount);
 
 
     if (
@@ -592,21 +558,20 @@ export default async function handler(
         {
           success: false,
           error:
-            "O valor do pedido deve ser um número inteiro entre 20 e 40.000 MZN."
+            "O valor deve ser um número inteiro entre 20 e 40.000 MZN."
         }
       );
     }
 
 
     /* -----------------------------------------------------
-     * TELEFONE
-     * ----------------------------------------------------- */
+       TELEFONE
+    ----------------------------------------------------- */
 
     const payerPhone =
-      requestedPhone ||
-      normalizePhone(
-        order.phone
-      );
+      String(
+        order.phone || ""
+      ).trim();
 
 
     if (!payerPhone) {
@@ -617,15 +582,46 @@ export default async function handler(
         {
           success: false,
           error:
-            "Número de telefone não encontrado."
+            "Número de telefone não encontrado no pedido."
         }
       );
     }
 
 
     /* -----------------------------------------------------
-     * REFERENCE
-     * ----------------------------------------------------- */
+       GARANTIR QUE O MÉTODO DO PEDIDO É CONSISTENTE
+    ----------------------------------------------------- */
+
+    const existingPayment =
+      normalizeMethod(
+        order.payment
+      );
+
+    if (
+      existingPayment &&
+      existingPayment !==
+      requestedMethod
+    ) {
+
+      return json(
+        res,
+        409,
+        {
+          success: false,
+          error:
+            "O método de pagamento não corresponde ao pedido.",
+          order_id:
+            order.order_id,
+          payment:
+            existingPayment
+        }
+      );
+    }
+
+
+    /* -----------------------------------------------------
+       REFERÊNCIA
+    ----------------------------------------------------- */
 
     const reference =
       String(
@@ -634,14 +630,8 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * IDEMPOTÊNCIA
-     * -----------------------------------------------------
-     *
-     * O mesmo order_id representa a mesma cobrança.
-     *
-     * Isso reduz o risco de criar cobranças
-     * duplicadas em caso de retry.
-     */
+       IDEMPOTÊNCIA
+    ----------------------------------------------------- */
 
     const idempotencyKey =
       "payment:" +
@@ -649,30 +639,45 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * ATUALIZAR MÉTODO
-     * ----------------------------------------------------- */
+       SE JÁ TEMOS PAGAR PAYMENT ID
+       NÃO CRIAR OUTRA COBRANÇA
+    ----------------------------------------------------- */
 
-    await sql`
+    if (
+      order.pagar_payment_id
+    ) {
 
-      UPDATE orders
-
-      SET
-
-        payment =
-          ${requestedMethod},
-
-        updated_at =
-          NOW()
-
-      WHERE order_id =
-        ${orderId}
-
-    `;
+      return json(
+        res,
+        200,
+        {
+          success: true,
+          message:
+            "Pagamento já criado anteriormente.",
+          payment: {
+            id:
+              order.pagar_payment_id
+          },
+          order: {
+            order_id:
+              order.order_id,
+            status:
+              order.status,
+            amountMzn:
+              amount,
+            usdt_amount:
+              order.usdt_amount,
+            rate:
+              order.rate
+          }
+        }
+      );
+    }
 
 
     /* -----------------------------------------------------
-     * CRIAR PAGAMENTO
-     * ----------------------------------------------------- */
+       CRIAR PAGAMENTO
+    ----------------------------------------------------- */
 
     const pagarResponse =
       await pagarPost(
@@ -699,22 +704,23 @@ export default async function handler(
         },
 
         idempotencyKey
+
       );
 
-
-    /* -----------------------------------------------------
-     * NORMALIZAR RESPOSTA
-     * ----------------------------------------------------- */
 
     const payment =
       pagarResponse?.payment ||
       pagarResponse;
 
 
+    /* -----------------------------------------------------
+       VALIDAR RESPOSTA
+    ----------------------------------------------------- */
+
     if (!payment?.id) {
 
       console.error(
-        "USDTMZ PAGAR INVALID RESPONSE:",
+        "PAGAR INVALID RESPONSE:",
         pagarResponse
       );
 
@@ -731,42 +737,26 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * PAYMENT ID
-     * ----------------------------------------------------- */
-
-    const pagarPaymentId =
-      String(
-        payment.id
-      );
-
-
-    /* -----------------------------------------------------
-     * STATUS PAGAR
-     * ----------------------------------------------------- */
+       STATUS DA PAGAR
+    ----------------------------------------------------- */
 
     const pagarStatus =
       String(
-        payment.status ||
-        ""
-      )
-        .trim()
-        .toUpperCase();
+        payment.status || ""
+      ).toUpperCase();
 
 
     /*
-     * NUNCA transformar PROCESSING/PENDING
-     * em PAYMENT_CONFIRMED.
+     * IMPORTANTE:
      *
-     * Apenas PAID é confirmação imediata,
-     * caso a própria API devolva esse estado.
+     * Apenas PAID pode representar
+     * pagamento confirmado.
      *
-     * Mesmo assim, o webhook continuará sendo
-     * a fonte definitiva.
+     * PROCESSING / PENDING continuam PENDING.
      */
 
     let orderStatus =
       "PENDING";
-
 
     if (
       pagarStatus ===
@@ -779,8 +769,8 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * TRANSACTION ID DO PROVIDER
-     * ----------------------------------------------------- */
+       TRANSACTION ID
+    ----------------------------------------------------- */
 
     const providerTransactionId =
       payment.providerTransactionId ||
@@ -788,8 +778,8 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * ATUALIZAR ORDER
-     * ----------------------------------------------------- */
+       GUARDAR PAGAMENTO
+    ----------------------------------------------------- */
 
     await sql`
 
@@ -797,14 +787,16 @@ export default async function handler(
 
       SET
 
-        pagar_payment_id =
-          ${pagarPaymentId},
-
         status =
           ${orderStatus},
 
         payment =
           ${requestedMethod},
+
+        pagar_payment_id =
+          ${String(
+            payment.id
+          )},
 
         updated_at =
           NOW()
@@ -816,13 +808,13 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * GUARDAR TRANSACTION ID
-     * ----------------------------------------------------- */
+       GUARDAR TRANSACTION ID
+    ----------------------------------------------------- */
 
     if (
       providerTransactionId &&
       requestedMethod ===
-        "MPESA"
+      "MPESA"
     ) {
 
       await sql`
@@ -843,13 +835,14 @@ export default async function handler(
           ${orderId}
 
       `;
+
     }
 
 
     if (
       providerTransactionId &&
       requestedMethod ===
-        "EMOLA"
+      "EMOLA"
     ) {
 
       await sql`
@@ -870,37 +863,36 @@ export default async function handler(
           ${orderId}
 
       `;
+
     }
 
 
     /* -----------------------------------------------------
-     * RESPOSTA
-     * ----------------------------------------------------- */
+       RESPOSTA
+    ----------------------------------------------------- */
 
     return json(
       res,
-      202,
+      orderStatus ===
+      "PAYMENT_CONFIRMED"
+        ? 200
+        : 202,
       {
 
-        success:
-          true,
-
-        message:
-          orderStatus ===
-          "PAYMENT_CONFIRMED"
-
-            ? "Pagamento confirmado pela Pagar."
-
-            : "Pagamento criado e aguardando confirmação.",
+        success: true,
 
         payment: {
 
           id:
-            pagarPaymentId,
+            payment.id,
 
           status:
             payment.status ||
-            "PROCESSING",
+            "PENDING",
+
+          environment:
+            payment.environment ||
+            null,
 
           reference:
             payment.reference ||
@@ -922,22 +914,22 @@ export default async function handler(
             payment.payerPhone ||
             payerPhone,
 
-          providerTransactionId:
-            providerTransactionId,
-
-          paidAt:
-            payment.paidAt ||
-            null,
+          providerTransactionId,
 
           failureReason:
             payment.failureReason ||
+            null,
+
+          paidAt:
+            payment.paidAt ||
             null
+
         },
 
         order: {
 
           order_id:
-            orderId,
+            order.order_id,
 
           status:
             orderStatus,
@@ -949,16 +941,8 @@ export default async function handler(
             order.usdt_amount,
 
           rate:
-            order.rate,
+            order.rate
 
-          pagar_payment_id:
-            pagarPaymentId,
-
-          usdtReleased:
-            false,
-
-          blockchainBroadcasted:
-            false
         }
 
       }
@@ -975,8 +959,8 @@ export default async function handler(
 
 
     /* -----------------------------------------------------
-     * CONFLITO
-     * ----------------------------------------------------- */
+       CONFLITO
+    ----------------------------------------------------- */
 
     if (
       error?.httpStatus ===
@@ -988,30 +972,27 @@ export default async function handler(
         409,
         {
           success: false,
-
           error:
             error.message ||
             "Conflito ao criar o pagamento.",
-
           code:
-            error.code ||
-            null,
-
+            error.code || null,
           requestId:
-            error.requestId ||
-            null
+            error.requestId || null
         }
       );
     }
 
 
     /* -----------------------------------------------------
-     * AUTH
-     * ----------------------------------------------------- */
+       AUTENTICAÇÃO
+    ----------------------------------------------------- */
 
     if (
-      error?.httpStatus === 401 ||
-      error?.httpStatus === 403
+      error?.httpStatus ===
+        401 ||
+      error?.httpStatus ===
+        403
     ) {
 
       return json(
@@ -1019,21 +1000,18 @@ export default async function handler(
         502,
         {
           success: false,
-
           error:
             "A Pagar recusou a autenticação da API.",
-
           requestId:
-            error.requestId ||
-            null
+            error.requestId || null
         }
       );
     }
 
 
     /* -----------------------------------------------------
-     * RATE LIMIT
-     * ----------------------------------------------------- */
+       RATE LIMIT
+    ----------------------------------------------------- */
 
     if (
       error?.httpStatus ===
@@ -1045,31 +1023,26 @@ export default async function handler(
         429,
         {
           success: false,
-
           error:
-            "Limite temporário da API atingido. Tente novamente mais tarde.",
-
+            "Limite temporário da API atingido.",
           requestId:
-            error.requestId ||
-            null
+            error.requestId || null
         }
       );
     }
 
 
     /* -----------------------------------------------------
-     * ERRO
-     * ----------------------------------------------------- */
+       ERRO GERAL
+    ----------------------------------------------------- */
 
     return json(
       res,
       500,
       {
         success: false,
-
         error:
           "Erro interno ao criar o pagamento.",
-
         requestId:
           error?.requestId ||
           null
