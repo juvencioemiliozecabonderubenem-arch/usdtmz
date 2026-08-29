@@ -1,54 +1,44 @@
 import { neon } from "@neondatabase/serverless";
 import crypto from "node:crypto";
 
-const WEBHOOK_SECRET =
-  process.env.PAGAR_WEBHOOK_SECRET;
-
 /*
  * =========================================================
  * USDTMZ — PAGAR WEBHOOK
  * =========================================================
  *
- * Recebe eventos finais da Pagar.
+ * POST /api/pagar/webhook
  *
- * Fluxo:
- *
- * Pagar
- *   ↓
- * webhook
- *   ↓
- * validar assinatura
- *   ↓
- * localizar order pela reference
- *   ↓
- * PAID
- *   ↓
- * orders = PAYMENT_CONFIRMED
+ * Responsabilidades:
+ * - validar Pagar-Signature
+ * - validar Pagar-Event-Id
+ * - impedir processamento duplicado
+ * - localizar o pedido USDTMZ
+ * - confirmar pagamento somente quando PAID
+ * - guardar IDs M-Pesa/eMola
  *
  * IMPORTANTE:
- * Nunca marcar PAYMENT_CONFIRMED apenas porque
- * recebemos o webhook.
+ * Este endpoint NÃO envia USDT.
  *
- * Primeiro:
- * 1. validar assinatura
- * 2. validar evento
- * 3. validar referência
- * 4. validar valor
- * 5. validar moeda
- * 6. garantir idempotência
+ * O envio TRON acontece somente depois de:
  *
- * Somente depois:
+ * PENDING
+ *    ↓
  * PAYMENT_CONFIRMED
+ *
  * =========================================================
  */
 
+const WEBHOOK_SECRET =
+  process.env.PAGAR_WEBHOOK_SECRET;
 
-/* =========================================================
-   RESPOSTA
-========================================================= */
+
+/*
+ * =========================================================
+ * JSON
+ * =========================================================
+ */
 
 function json(res, status, data) {
-
   res.setHeader(
     "Content-Type",
     "application/json"
@@ -60,205 +50,231 @@ function json(res, status, data) {
 }
 
 
-/* =========================================================
-   BODY RAW
-========================================================= */
+/*
+ * =========================================================
+ * RAW BODY
+ * =========================================================
+ *
+ * A assinatura deve ser calculada sobre o corpo original.
+ * Não fazemos JSON.stringify novamente antes da validação.
+ * =========================================================
+ */
 
 function getRawBody(req) {
 
-  if (Buffer.isBuffer(req.body)) {
+  if (typeof req.body === "string") {
     return req.body;
   }
 
-  if (typeof req.body === "string") {
-    return Buffer.from(
-      req.body,
-      "utf8"
-    );
+  if (Buffer.isBuffer(req.body)) {
+    return req.body.toString("utf8");
   }
+
+  /*
+   * Vercel normalmente entrega req.body já parseado.
+   * Se não tivermos acesso ao raw body, NÃO tentamos
+   * adivinhar a assinatura.
+   */
 
   return null;
 }
 
 
-/* =========================================================
-   ASSINATURA WEBHOOK
-========================================================= */
+/*
+ * =========================================================
+ * HEADER
+ * =========================================================
+ */
 
-function verifyWebhookSignature(
+function getHeader(req, name) {
+
+  const value =
+    req.headers[name.toLowerCase()];
+
+  if (Array.isArray(value)) {
+    return value[0] || null;
+  }
+
+  return value
+    ? String(value)
+    : null;
+}
+
+
+/*
+ * =========================================================
+ * VALIDAR ASSINATURA
+ * =========================================================
+ */
+
+function verifySignature(
   rawBody,
   signatureHeader
 ) {
 
-  if (!WEBHOOK_SECRET) {
+  if (
+    !WEBHOOK_SECRET ||
+    !rawBody ||
+    !signatureHeader
+  ) {
     return false;
   }
 
-  if (!signatureHeader) {
-    return false;
-  }
 
   /*
    * Formato esperado:
    *
-   * t=timestamp,v1=hash
+   * t=timestamp,v1=signature
    */
 
   const parts =
     signatureHeader
-      .split(",")
-      .map(part => part.trim());
+      .split(",");
 
   let timestamp = null;
-  let receivedSignature = null;
+  let signature = null;
 
   for (const part of parts) {
 
-    const index =
-      part.indexOf("=");
-
-    if (index === -1) {
-      continue;
-    }
-
-    const key =
-      part.slice(0, index);
+    const [key, ...rest] =
+      part.trim().split("=");
 
     const value =
-      part.slice(index + 1);
+      rest.join("=");
 
     if (key === "t") {
       timestamp = value;
     }
 
     if (key === "v1") {
-      receivedSignature = value;
+      signature = value;
     }
   }
 
+
   if (
     !timestamp ||
-    !receivedSignature
+    !signature
   ) {
     return false;
   }
 
-  /*
-   * Timestamp precisa ser numérico.
-   */
-
-  if (!/^\d+$/.test(timestamp)) {
-    return false;
-  }
 
   /*
-   * Proteção contra replay.
+   * Evita replay de eventos antigos.
    *
-   * Aceitamos apenas eventos dentro
-   * de uma janela de 5 minutos.
+   * Janela de 5 minutos.
    */
 
-  const timestampSeconds =
+  const timestampNumber =
     Number(timestamp);
 
   if (
-    !Number.isSafeInteger(
-      timestampSeconds
+    !Number.isFinite(
+      timestampNumber
     )
   ) {
     return false;
   }
 
-  const nowSeconds =
-    Math.floor(
-      Date.now() / 1000
-    );
 
-  const difference =
+  const timestampMs =
+    timestampNumber < 1e12
+      ? timestampNumber * 1000
+      : timestampNumber;
+
+  const age =
     Math.abs(
-      nowSeconds -
-      timestampSeconds
+      Date.now() -
+      timestampMs
     );
 
-  if (difference > 300) {
+  if (age > 5 * 60 * 1000) {
     return false;
   }
+
 
   /*
    * Assinatura:
    *
-   * timestamp.rawBody
+   * timestamp + "." + rawBody
    */
 
   const signedPayload =
     timestamp +
     "." +
-    rawBody.toString("utf8");
+    rawBody;
 
-  const expectedSignature =
+
+  const expected =
     crypto
       .createHmac(
         "sha256",
         WEBHOOK_SECRET
       )
-      .update(signedPayload)
+      .update(
+        signedPayload,
+        "utf8"
+      )
       .digest("hex");
 
+
   /*
-   * Validar formato hexadecimal.
+   * Comparação segura.
    */
 
+  const receivedBuffer =
+    Buffer.from(
+      signature,
+      "utf8"
+    );
+
+  const expectedBuffer =
+    Buffer.from(
+      expected,
+      "utf8"
+    );
+
+
   if (
-    !/^[a-f0-9]{64}$/i.test(
-      receivedSignature
-    )
+    receivedBuffer.length !==
+    expectedBuffer.length
   ) {
     return false;
   }
 
-  const received =
-    Buffer.from(
-      receivedSignature,
-      "hex"
-    );
-
-  const expected =
-    Buffer.from(
-      expectedSignature,
-      "hex"
-    );
-
-  if (
-    received.length !==
-    expected.length
-  ) {
-    return false;
-  }
 
   return crypto.timingSafeEqual(
-    received,
-    expected
+    receivedBuffer,
+    expectedBuffer
   );
 }
 
 
-/* =========================================================
-   NORMALIZAR STATUS
-========================================================= */
+/*
+ * =========================================================
+ * EXTRAIR PAYMENT
+ * =========================================================
+ */
 
-function normalizeStatus(value) {
+function extractPayment(payload) {
 
-  return String(
-    value || ""
-  )
-    .trim()
-    .toUpperCase();
+  if (
+    payload &&
+    typeof payload.payment === "object"
+  ) {
+    return payload.payment;
+  }
+
+  return payload;
 }
 
 
-/* =========================================================
-   HANDLER
-========================================================= */
+/*
+ * =========================================================
+ * HANDLER
+ * =========================================================
+ */
 
 export default async function handler(
   req,
@@ -311,10 +327,11 @@ export default async function handler(
       );
     }
 
+
     if (!WEBHOOK_SECRET) {
 
       console.error(
-        "PAGAR_WEBHOOK_SECRET ausente."
+        "PAGAR_WEBHOOK_SECRET não configurado."
       );
 
       return json(
@@ -323,7 +340,7 @@ export default async function handler(
         {
           success: false,
           error:
-            "Webhook não configurado."
+            "Webhook não configurado no servidor."
         }
       );
     }
@@ -331,39 +348,21 @@ export default async function handler(
 
     /*
      * -----------------------------------------------------
-     * RAW BODY
-     * -----------------------------------------------------
-     */
-
-    const rawBody =
-      getRawBody(req);
-
-    if (!rawBody) {
-
-      return json(
-        res,
-        400,
-        {
-          success: false,
-          error:
-            "Body inválido."
-        }
-      );
-    }
-
-
-    /*
-     * -----------------------------------------------------
-     * EVENT ID
+     * HEADERS
      * -----------------------------------------------------
      */
 
     const eventId =
-      String(
-        req.headers[
-          "pagar-event-id"
-        ] || ""
-      ).trim();
+      getHeader(
+        req,
+        "Pagar-Event-Id"
+      );
+
+    const signature =
+      getHeader(
+        req,
+        "Pagar-Signature"
+      );
 
 
     if (!eventId) {
@@ -380,22 +379,57 @@ export default async function handler(
     }
 
 
+    if (!signature) {
+
+      return json(
+        res,
+        400,
+        {
+          success: false,
+          error:
+            "Pagar-Signature ausente."
+        }
+      );
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * RAW BODY
+     * -----------------------------------------------------
+     */
+
+    const rawBody =
+      getRawBody(req);
+
+
+    if (!rawBody) {
+
+      /*
+       * Nunca processamos webhook sem
+       * conseguir verificar a assinatura.
+       */
+
+      return json(
+        res,
+        400,
+        {
+          success: false,
+          error:
+            "Corpo original do webhook indisponível para validação."
+        }
+      );
+    }
+
+
     /*
      * -----------------------------------------------------
      * ASSINATURA
      * -----------------------------------------------------
      */
 
-    const signature =
-      String(
-        req.headers[
-          "pagar-signature"
-        ] || ""
-      ).trim();
-
-
     const validSignature =
-      verifyWebhookSignature(
+      verifySignature(
         rawBody,
         signature
       );
@@ -403,8 +437,8 @@ export default async function handler(
 
     if (!validSignature) {
 
-      console.error(
-        "USDTMZ: assinatura webhook inválida."
+      console.warn(
+        "PAGAR WEBHOOK: assinatura inválida."
       );
 
       return json(
@@ -413,7 +447,7 @@ export default async function handler(
         {
           success: false,
           error:
-            "Assinatura inválida."
+            "Assinatura do webhook inválida."
         }
       );
     }
@@ -421,20 +455,16 @@ export default async function handler(
 
     /*
      * -----------------------------------------------------
-     * PARSE JSON
+     * JSON
      * -----------------------------------------------------
      */
 
-    let event;
+    let payload;
 
     try {
 
-      event =
-        JSON.parse(
-          rawBody.toString(
-            "utf8"
-          )
-        );
+      payload =
+        JSON.parse(rawBody);
 
     } catch {
 
@@ -444,7 +474,98 @@ export default async function handler(
         {
           success: false,
           error:
-            "JSON do webhook inválido."
+            "Payload JSON inválido."
+        }
+      );
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * PAYMENT
+     * -----------------------------------------------------
+     */
+
+    const payment =
+      extractPayment(payload);
+
+
+    if (
+      !payment ||
+      typeof payment !== "object"
+    ) {
+
+      return json(
+        res,
+        400,
+        {
+          success: false,
+          error:
+            "Pagamento não encontrado no webhook."
+        }
+      );
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * CAMPOS PRINCIPAIS
+     * -----------------------------------------------------
+     */
+
+    const paymentId =
+      payment.id
+        ? String(payment.id)
+        : null;
+
+    const reference =
+      payment.reference
+        ? String(payment.reference)
+        : null;
+
+    const status =
+      String(
+        payment.status || ""
+      )
+        .trim()
+        .toUpperCase();
+
+    const method =
+      String(
+        payment.method || ""
+      )
+        .trim()
+        .toUpperCase();
+
+    const providerTransactionId =
+      payment.providerTransactionId
+        ? String(
+            payment.providerTransactionId
+          )
+        : null;
+
+    const eventType =
+      payload?.type ||
+      payload?.event ||
+      payload?.eventType ||
+      null;
+
+
+    /*
+     * -----------------------------------------------------
+     * EVENTO MÍNIMO
+     * -----------------------------------------------------
+     */
+
+    if (!paymentId && !reference) {
+
+      return json(
+        res,
+        400,
+        {
+          success: false,
+          error:
+            "Webhook não contém payment.id nem reference."
         }
       );
     }
@@ -464,85 +585,58 @@ export default async function handler(
 
     /*
      * -----------------------------------------------------
-     * IDENTIFICAR PAYMENT
-     * -----------------------------------------------------
-     */
-
-    const payment =
-      event?.payment ||
-      event?.data?.payment ||
-      event?.data ||
-      null;
-
-
-    const eventType =
-      String(
-        event?.type ||
-        event?.event ||
-        ""
-      ).trim();
-
-
-    const paymentId =
-      String(
-        payment?.id ||
-        ""
-      ).trim();
-
-
-    const reference =
-      String(
-        payment?.reference ||
-        event?.reference ||
-        ""
-      ).trim();
-
-
-    const paymentStatus =
-      normalizeStatus(
-        payment?.status
-      );
-
-
-    /*
-     * -----------------------------------------------------
-     * LOG CONTROLADO
-     * -----------------------------------------------------
-     */
-
-    console.log(
-      "USDTMZ PAGAR WEBHOOK:",
-      {
-        eventId,
-        eventType,
-        paymentId,
-        reference,
-        status:
-          paymentStatus
-      }
-    );
-
-
-    /*
-     * -----------------------------------------------------
-     * EVENTO DUPLICADO
+     * IDEMPOTÊNCIA DO EVENTO
      * -----------------------------------------------------
      *
-     * Como ainda não temos uma tabela de eventos,
-     * verificamos primeiro o pedido pelo payment ID.
+     * Primeiro tentamos registrar o event_id.
      *
-     * Se já estiver confirmado, respondemos 200.
+     * Se já existir, o webhook já foi processado.
+     * -----------------------------------------------------
      */
 
-    if (!reference) {
+    const inserted =
+      await sql`
+
+        INSERT INTO pagar_webhook_events (
+
+          event_id,
+          event_type,
+          payment_id,
+          reference,
+          payload,
+          processed_at
+
+        )
+
+        VALUES (
+
+          ${eventId},
+          ${eventType},
+          ${paymentId},
+          ${reference},
+          ${JSON.stringify(payload)}::jsonb,
+          NOW()
+
+        )
+
+        ON CONFLICT (event_id)
+        DO NOTHING
+
+        RETURNING id
+
+      `;
+
+
+    if (inserted.length === 0) {
 
       return json(
         res,
-        400,
+        200,
         {
-          success: false,
-          error:
-            "Reference ausente no webhook."
+          success: true,
+          duplicate: true,
+          message:
+            "Webhook já processado."
         }
       );
     }
@@ -550,61 +644,123 @@ export default async function handler(
 
     /*
      * -----------------------------------------------------
-     * LOCALIZAR ORDER
+     * LOCALIZAR PEDIDO
      * -----------------------------------------------------
      */
 
-    const orders =
-      await sql`
+    let orders = [];
 
-        SELECT
 
-          id,
-          order_id,
-          name,
-          phone,
-          operation,
-          payment,
-          amount,
-          usdt_amount,
-          rate,
-          status,
-          created_at,
-          mpesa_transaction_id,
-          emola_transaction_id,
-          pagar_payment_id,
-          blockchain_tx_hash,
-          wallet_address,
-          updated_at
+    if (reference) {
 
-        FROM orders
+      orders =
+        await sql`
 
-        WHERE order_id =
-          ${reference}
+          SELECT
 
-        LIMIT 1
+            id,
+            order_id,
+            name,
+            phone,
+            operation,
+            payment,
+            amount,
+            usdt_amount,
+            rate,
+            status,
+            created_at,
+            mpesa_transaction_id,
+            emola_transaction_id,
+            pagar_payment_id,
+            blockchain_tx_hash,
+            wallet_address,
+            updated_at
 
-      `;
+          FROM orders
 
+          WHERE order_id =
+            ${reference}
+
+          LIMIT 1
+
+        `;
+    }
+
+
+    /*
+     * Se reference não encontrar,
+     * tentamos pelo payment ID já gravado.
+     */
+
+    if (
+      orders.length === 0 &&
+      paymentId
+    ) {
+
+      orders =
+        await sql`
+
+          SELECT
+
+            id,
+            order_id,
+            name,
+            phone,
+            operation,
+            payment,
+            amount,
+            usdt_amount,
+            rate,
+            status,
+            created_at,
+            mpesa_transaction_id,
+            emola_transaction_id,
+            pagar_payment_id,
+            blockchain_tx_hash,
+            wallet_address,
+            updated_at
+
+          FROM orders
+
+          WHERE pagar_payment_id =
+            ${paymentId}
+
+          LIMIT 1
+
+        `;
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * PEDIDO NÃO ENCONTRADO
+     * -----------------------------------------------------
+     */
 
     if (orders.length === 0) {
 
       console.error(
-        "USDTMZ: order não encontrada:",
-        reference
+        "PAGAR WEBHOOK: pedido não encontrado.",
+        {
+          eventId,
+          paymentId,
+          reference
+        }
       );
 
       /*
-       * Não confirmar pagamento desconhecido.
+       * O evento continua registrado para
+       * impedir processamento infinito.
        */
 
       return json(
         res,
-        404,
+        200,
         {
-          success: false,
-          error:
-            "Pedido não encontrado."
+          success: true,
+          processed: false,
+          message:
+            "Webhook recebido, mas o pedido não foi encontrado."
         }
       );
     }
@@ -616,91 +772,41 @@ export default async function handler(
 
     /*
      * -----------------------------------------------------
-     * JÁ CONFIRMADO
+     * VALIDAR PAYMENT ID
+     * -----------------------------------------------------
+     *
+     * Se já existir outro payment ID no pedido,
+     * não substituímos silenciosamente.
      * -----------------------------------------------------
      */
 
     if (
-      order.status ===
-      "PAYMENT_CONFIRMED" ||
-      order.status ===
-      "USDT_SENT" ||
-      order.status ===
-      "COMPLETED"
+      order.pagar_payment_id &&
+      paymentId &&
+      String(
+        order.pagar_payment_id
+      ) !== paymentId
     ) {
 
-      return json(
-        res,
-        200,
+      console.error(
+        "PAGAR WEBHOOK: payment ID incompatível.",
         {
-          success: true,
-          message:
-            "Evento já processado.",
-          order_id:
+          orderId:
             order.order_id,
-          status:
-            order.status
+          existing:
+            order.pagar_payment_id,
+          received:
+            paymentId
         }
       );
-    }
-
-
-    /*
-     * -----------------------------------------------------
-     * APENAS PAID CONFIRMA
-     * -----------------------------------------------------
-     */
-
-    if (
-      paymentStatus !==
-      "PAID"
-    ) {
-
-      /*
-       * PROCESSING / PENDING / FAILED /
-       * CANCELLED não recebem USDT.
-       */
-
-      if (
-        paymentStatus ===
-          "FAILED" ||
-        paymentStatus ===
-          "CANCELLED"
-      ) {
-
-        await sql`
-
-          UPDATE orders
-
-          SET
-
-            status =
-              'FAILED',
-
-            updated_at =
-              NOW()
-
-          WHERE order_id =
-            ${reference}
-
-            AND status =
-              'PENDING'
-
-        `;
-
-      }
 
       return json(
         res,
-        200,
+        409,
         {
-          success: true,
-          message:
-            "Evento recebido sem confirmação financeira.",
-          order_id:
-            order.order_id,
-          status:
-            paymentStatus || "UNKNOWN"
+          success: false,
+          error:
+            "Pagamento incompatível com o pedido."
         }
       );
     }
@@ -710,33 +816,37 @@ export default async function handler(
      * -----------------------------------------------------
      * VALIDAR VALOR
      * -----------------------------------------------------
+     *
+     * O valor esperado vem de orders.amount.
+     * -----------------------------------------------------
      */
 
-    const webhookAmount =
-      Number(
-        payment?.amountMzn
-      );
+    const expectedAmount =
+      Number(order.amount);
 
-    const orderAmount =
+    const receivedAmount =
       Number(
-        order.amount
+        payment.amountMzn
       );
 
 
     if (
-      !Number.isSafeInteger(
-        webhookAmount
+      !Number.isFinite(
+        receivedAmount
       ) ||
-      webhookAmount !==
-      orderAmount
+      receivedAmount !==
+        expectedAmount
     ) {
 
       console.error(
-        "USDTMZ: valor do webhook não corresponde ao pedido.",
+        "PAGAR WEBHOOK: valor incompatível.",
         {
-          reference,
-          webhookAmount,
-          orderAmount
+          orderId:
+            order.order_id,
+          expected:
+            expectedAmount,
+          received:
+            receivedAmount
         }
       );
 
@@ -754,56 +864,33 @@ export default async function handler(
 
     /*
      * -----------------------------------------------------
-     * VALIDAR MOEDA
+     * VALIDAR MÉTODO
      * -----------------------------------------------------
      */
 
-    const currency =
+    const expectedMethod =
       String(
-        payment?.currency ||
-        "MZN"
-      ).toUpperCase();
+        order.payment || ""
+      )
+        .trim()
+        .toUpperCase();
 
 
     if (
-      currency !==
-      "MZN"
-    ) {
-
-      return json(
-        res,
-        409,
-        {
-          success: false,
-          error:
-            "Moeda do pagamento inválida."
-        }
-      );
-    }
-
-
-    /*
-     * -----------------------------------------------------
-     * PAYMENT ID
-     * -----------------------------------------------------
-     */
-
-    if (
-      paymentId &&
-      order.pagar_payment_id &&
-      String(
-        order.pagar_payment_id
-      ) !== paymentId
+      method &&
+      expectedMethod &&
+      method !== expectedMethod
     ) {
 
       console.error(
-        "USDTMZ: payment ID divergente.",
+        "PAGAR WEBHOOK: método incompatível.",
         {
-          reference,
+          orderId:
+            order.order_id,
           expected:
-            order.pagar_payment_id,
+            expectedMethod,
           received:
-            paymentId
+            method
         }
       );
 
@@ -813,7 +900,7 @@ export default async function handler(
         {
           success: false,
           error:
-            "Pagamento não corresponde à tentativa registrada."
+            "Método de pagamento não corresponde ao pedido."
         }
       );
     }
@@ -821,42 +908,97 @@ export default async function handler(
 
     /*
      * -----------------------------------------------------
-     * ATUALIZAR PAYMENT ID
+     * GUARDAR PAYMENT ID
      * -----------------------------------------------------
      */
 
-    const finalPaymentId =
-      paymentId ||
-      order.pagar_payment_id ||
-      null;
+    await sql`
+
+      UPDATE orders
+
+      SET
+
+        pagar_payment_id =
+          ${paymentId},
+
+        updated_at =
+          NOW()
+
+      WHERE order_id =
+        ${order.order_id}
+
+    `;
 
 
     /*
      * -----------------------------------------------------
-     * TRANSACTION ID
+     * STATUS
+     * -----------------------------------------------------
+     *
+     * SOMENTE PAID confirma pagamento.
+     *
+     * PROCESSING/PENDING continuam PENDING.
      * -----------------------------------------------------
      */
 
-    const providerTransactionId =
-      payment?.providerTransactionId ||
-      null;
+    if (status === "PAID") {
+
+      /*
+       * Guardar transaction ID.
+       */
+
+      if (
+        providerTransactionId &&
+        expectedMethod === "MPESA"
+      ) {
+
+        await sql`
+
+          UPDATE orders
+
+          SET
+
+            mpesa_transaction_id =
+              ${providerTransactionId},
+
+            updated_at =
+              NOW()
+
+          WHERE order_id =
+            ${order.order_id}
+
+        `;
+      }
 
 
-    /*
-     * -----------------------------------------------------
-     * ATUALIZAR PEDIDO
-     * -----------------------------------------------------
-     *
-     * Somente agora:
-     *
-     * PENDING
-     *    ↓
-     * PAYMENT_CONFIRMED
-     *
-     * Nenhum USDT é enviado neste arquivo.
-     */
+      if (
+        providerTransactionId &&
+        expectedMethod === "EMOLA"
+      ) {
 
-    const updated =
+        await sql`
+
+          UPDATE orders
+
+          SET
+
+            emola_transaction_id =
+              ${providerTransactionId},
+
+            updated_at =
+              NOW()
+
+          WHERE order_id =
+            ${order.order_id}
+
+        `;
+      }
+
+
+      /*
+       * Não sobrescrever COMPLETED.
+       */
+
       await sql`
 
         UPDATE orders
@@ -864,41 +1006,19 @@ export default async function handler(
         SET
 
           status =
-            'PAYMENT_CONFIRMED',
-
-          pagar_payment_id =
-            COALESCE(
-              ${finalPaymentId},
-              pagar_payment_id
-            ),
-
-          mpesa_transaction_id =
             CASE
 
-              WHEN UPPER(payment) =
-                'MPESA'
+              WHEN status =
+                'COMPLETED'
 
-              THEN COALESCE(
-                ${providerTransactionId},
-                mpesa_transaction_id
-              )
+              THEN status
 
-              ELSE mpesa_transaction_id
+              WHEN status =
+                'USDT_SENT'
 
-            END,
+              THEN status
 
-          emola_transaction_id =
-            CASE
-
-              WHEN UPPER(payment) =
-                'EMOLA'
-
-              THEN COALESCE(
-                ${providerTransactionId},
-                emola_transaction_id
-              )
-
-              ELSE emola_transaction_id
+              ELSE 'PAYMENT_CONFIRMED'
 
             END,
 
@@ -906,73 +1026,42 @@ export default async function handler(
             NOW()
 
         WHERE order_id =
-          ${reference}
-
-          AND status =
-            'PENDING'
-
-        RETURNING
-
-          id,
-          order_id,
-          status,
-          amount,
-          usdt_amount,
-          rate,
-          pagar_payment_id,
-          updated_at
+          ${order.order_id}
 
       `;
 
 
-    /*
-     * -----------------------------------------------------
-     * CORRIDA / DUPLICAÇÃO
-     * -----------------------------------------------------
-     */
+      console.log(
+        "USDTMZ PAYMENT CONFIRMED:",
+        {
+          orderId:
+            order.order_id,
+          paymentId,
+          method,
+          amount:
+            expectedAmount
+        }
+      );
 
-    if (updated.length === 0) {
-
-      const current =
-        await sql`
-
-          SELECT
-            order_id,
-            status
-
-          FROM orders
-
-          WHERE order_id =
-            ${reference}
-
-          LIMIT 1
-
-        `;
 
       return json(
         res,
         200,
         {
           success: true,
-          message:
-            "Evento já processado ou pedido mudou de estado.",
-          order_id:
-            reference,
+          processed: true,
           status:
-            current[0]?.status ||
-            null
+            "PAYMENT_CONFIRMED",
+          order_id:
+            order.order_id
         }
       );
     }
 
 
-    const confirmed =
-      updated[0];
-
-
     /*
      * -----------------------------------------------------
-     * SUCESSO
+     * PAGAMENTO AINDA NÃO CONFIRMADO
      * -----------------------------------------------------
      */
 
@@ -981,43 +1070,13 @@ export default async function handler(
       200,
       {
         success: true,
-
-        message:
-          "Pagamento confirmado com sucesso.",
-
-        event_id:
-          eventId,
-
-        payment_id:
-          finalPaymentId,
-
-        order: {
-
-          order_id:
-            confirmed.order_id,
-
-          status:
-            confirmed.status,
-
-          amountMzn:
-            Number(
-              confirmed.amount
-            ),
-
-          usdt_amount:
-            confirmed.usdt_amount,
-
-          rate:
-            confirmed.rate,
-
-          confirmed_at:
-            confirmed.updated_at
-
-        },
-
-        next_step:
-          "PROCESS_USDT"
-
+        processed: true,
+        status:
+          "PENDING",
+        payment_status:
+          status || null,
+        order_id:
+          order.order_id
       }
     );
 
@@ -1030,9 +1089,6 @@ export default async function handler(
       error
     );
 
-    /*
-     * 500 faz a Pagar tentar novamente.
-     */
 
     return json(
       res,
