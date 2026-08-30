@@ -18,18 +18,32 @@ import crypto from "node:crypto";
  *   ↓
  * validar evento
  *   ↓
- * localizar order_id/reference
+ * localizar pedido
  *   ↓
- * confirmar valor
+ * validar valor
  *   ↓
  * PAYMENT_CONFIRMED
  *
+ * TABELA EXISTENTE:
+ *
+ * pagar_webhook_events
+ *
+ * Colunas:
+ *   id
+ *   event_id
+ *   event_type
+ *   payment_id
+ *   reference
+ *   payload
+ *   processed_at
+ *   created_at
+ *
  * IMPORTANTE:
- * - O webhook NÃO confia no frontend.
- * - HTTP 202 do /api/payment NÃO confirma pagamento.
- * - Somente evento final PAID/payment.succeeded confirma.
- * - Eventos repetidos não podem processar o pedido duas vezes.
+ * - event_id é UNIQUE.
+ * - Eventos duplicados não serão processados duas vezes.
  * - PAGAR_WEBHOOK_SECRET fica somente no servidor.
+ * - PENDING / PROCESSING não confirmam pagamento.
+ * - Somente payment.succeeded + PAID confirma pagamento.
  * =========================================================
  */
 
@@ -39,6 +53,7 @@ import crypto from "node:crypto";
 ========================================================= */
 
 function json(res, status, data) {
+
   res.setHeader(
     "Content-Type",
     "application/json"
@@ -57,19 +72,24 @@ function json(res, status, data) {
 function getRawBody(req) {
 
   if (Buffer.isBuffer(req.body)) {
+
     return req.body.toString("utf8");
+
   }
+
 
   if (typeof req.body === "string") {
+
     return req.body;
+
   }
 
+
   /*
-   * Atenção:
-   * JSON.stringify é apenas fallback.
+   * Fallback.
    *
-   * Para HMAC correto, o ideal é que a Vercel
-   * entregue o body bruto.
+   * Para validação HMAC perfeita, o ideal é
+   * receber o body bruto.
    */
 
   return JSON.stringify(
@@ -79,7 +99,28 @@ function getRawBody(req) {
 
 
 /* =========================================================
-   VALIDAR WEBHOOK PAGAR
+   NORMALIZAR HEADER
+========================================================= */
+
+function getHeader(req, name) {
+
+  const value =
+    req.headers[name] ??
+    req.headers[name.toLowerCase()] ??
+    req.headers[name.toUpperCase()];
+
+  if (Array.isArray(value)) {
+
+    return value[0];
+
+  }
+
+  return value;
+}
+
+
+/* =========================================================
+   VALIDAR ASSINATURA WEBHOOK
 ========================================================= */
 
 function verifyWebhook(
@@ -90,21 +131,31 @@ function verifyWebhook(
   const secret =
     process.env.PAGAR_WEBHOOK_SECRET;
 
+
   if (!secret) {
 
-    throw new Error(
-      "PAGAR_WEBHOOK_SECRET não configurado."
-    );
+    return {
+      ok: false,
+      status: 500,
+      error:
+        "PAGAR_WEBHOOK_SECRET não configurado."
+    };
+
   }
 
 
   const eventId =
-    req.headers["pagar-event-id"];
+    getHeader(
+      req,
+      "pagar-event-id"
+    );
 
 
   const signatureHeader =
-    req.headers["pagar-signature"] ||
-    "";
+    getHeader(
+      req,
+      "pagar-signature"
+    ) || "";
 
 
   if (!eventId) {
@@ -115,16 +166,18 @@ function verifyWebhook(
       error:
         "Pagar-Event-Id ausente."
     };
+
   }
 
 
   /*
-   * Exemplo:
+   * Exemplo esperado:
    *
    * t=1750000000000,v1=abcdef...
    */
 
   const parts = {};
+
 
   for (
     const item of String(
@@ -135,27 +188,35 @@ function verifyWebhook(
     const index =
       item.indexOf("=");
 
+
     if (index === -1) {
+
       continue;
+
     }
+
 
     const key =
       item
         .slice(0, index)
         .trim();
 
+
     const value =
       item
         .slice(index + 1)
         .trim();
 
+
     parts[key] =
       value;
+
   }
 
 
   const timestamp =
     parts.t;
+
 
   const receivedSignature =
     parts.v1;
@@ -172,11 +233,12 @@ function verifyWebhook(
       error:
         "Assinatura Pagar inválida."
     };
+
   }
 
 
   /*
-   * Timestamp deve ser numérico.
+   * Timestamp numérico.
    */
 
   if (
@@ -191,11 +253,12 @@ function verifyWebhook(
       error:
         "Timestamp inválido."
     };
+
   }
 
 
   /*
-   * HMAC SHA-256 = 64 caracteres hex.
+   * SHA-256 hexadecimal.
    */
 
   if (
@@ -210,13 +273,15 @@ function verifyWebhook(
       error:
         "Formato de assinatura inválido."
     };
+
   }
 
 
   /*
-   * Evitar replay de webhook antigo.
+   * Evitar replay.
    *
-   * Pagar usa timestamp em milissegundos.
+   * Aceitamos apenas webhooks dos últimos
+   * 5 minutos.
    */
 
   const timestampSeconds =
@@ -241,14 +306,19 @@ function verifyWebhook(
       error:
         "Webhook expirado."
     };
+
   }
 
 
   /*
-   * Assinatura oficial:
+   * Assinatura:
    *
    * timestamp + "." + rawBody
    */
+
+  const signedPayload =
+    `${timestamp}.${rawBody}`;
+
 
   const expectedSignature =
     crypto
@@ -257,7 +327,7 @@ function verifyWebhook(
         secret
       )
       .update(
-        `${timestamp}.${rawBody}`,
+        signedPayload,
         "utf8"
       )
       .digest("hex");
@@ -288,6 +358,7 @@ function verifyWebhook(
       error:
         "Assinatura inválida."
     };
+
   }
 
 
@@ -304,19 +375,24 @@ function verifyWebhook(
       error:
         "Assinatura inválida."
     };
+
   }
 
 
   return {
+
     ok: true,
+
     eventId:
       String(eventId)
+
   };
+
 }
 
 
 /* =========================================================
-   EXTRAIR PAGAMENTO
+   EXTRAIR PAYMENT
 ========================================================= */
 
 function getPayment(event) {
@@ -327,11 +403,12 @@ function getPayment(event) {
     event?.data ||
     {}
   );
+
 }
 
 
 /* =========================================================
-   NORMALIZAR EVENT TYPE
+   EVENT TYPE
 ========================================================= */
 
 function getEventType(event) {
@@ -343,6 +420,7 @@ function getEventType(event) {
   )
     .trim()
     .toLowerCase();
+
 }
 
 
@@ -379,12 +457,13 @@ export default async function handler(
           "Método não permitido."
       }
     );
+
   }
 
 
   /*
    * -------------------------------------------------------
-   * DATABASE
+   * CONFIGURAÇÃO
    * -------------------------------------------------------
    */
 
@@ -401,14 +480,9 @@ export default async function handler(
           "DATABASE_URL não configurada."
       }
     );
+
   }
 
-
-  /*
-   * -------------------------------------------------------
-   * WEBHOOK SECRET
-   * -------------------------------------------------------
-   */
 
   if (
     !process.env.PAGAR_WEBHOOK_SECRET
@@ -423,6 +497,7 @@ export default async function handler(
           "PAGAR_WEBHOOK_SECRET não configurado."
       }
     );
+
   }
 
 
@@ -464,6 +539,7 @@ export default async function handler(
             verification.error
         }
       );
+
     }
 
 
@@ -478,6 +554,7 @@ export default async function handler(
      */
 
     let event;
+
 
     try {
 
@@ -497,6 +574,7 @@ export default async function handler(
             "JSON do webhook inválido."
         }
       );
+
     }
 
 
@@ -512,32 +590,6 @@ export default async function handler(
 
     /*
      * -----------------------------------------------------
-     * IGNORAR EVENTOS QUE NÃO SÃO PAGAMENTOS
-     * -----------------------------------------------------
-     */
-
-    if (
-      !eventType.startsWith(
-        "payment."
-      )
-    ) {
-
-      return json(
-        res,
-        200,
-        {
-          success: true,
-          ignored: true,
-          event:
-            eventType ||
-            null
-        }
-      );
-    }
-
-
-    /*
-     * -----------------------------------------------------
      * PAYMENT
      * -----------------------------------------------------
      */
@@ -548,7 +600,9 @@ export default async function handler(
 
     const paymentId =
       payment?.id
-        ? String(payment.id)
+        ? String(
+            payment.id
+          )
         : null;
 
 
@@ -577,6 +631,89 @@ export default async function handler(
 
     /*
      * -----------------------------------------------------
+     * DATABASE
+     * -----------------------------------------------------
+     */
+
+    const sql =
+      neon(
+        process.env.DATABASE_URL
+      );
+
+
+    /*
+     * -----------------------------------------------------
+     * EVENTOS NÃO RELACIONADOS A PAYMENT
+     * -----------------------------------------------------
+     */
+
+    if (
+      !eventType.startsWith(
+        "payment."
+      )
+    ) {
+
+      /*
+       * Mesmo eventos que não são payment
+       * ficam registados.
+       *
+       * Isto permite auditoria.
+       */
+
+      await sql`
+
+        INSERT INTO pagar_webhook_events (
+
+          event_id,
+          event_type,
+          payment_id,
+          reference,
+          payload,
+          created_at,
+          processed_at
+
+        )
+
+        VALUES (
+
+          ${eventId},
+          ${eventType || null},
+          ${paymentId},
+          ${reference},
+          ${JSON.stringify(event)}::jsonb,
+          NOW(),
+          NOW()
+
+        )
+
+        ON CONFLICT (
+          event_id
+        )
+
+        DO NOTHING
+
+      `;
+
+
+      return json(
+        res,
+        200,
+        {
+          success: true,
+          ignored: true,
+          event:
+            eventType ||
+            null,
+          event_id:
+            eventId
+        }
+      );
+
+    }
+
+
+    /*
+     * -----------------------------------------------------
      * VALIDAR IDENTIFICADORES
      * -----------------------------------------------------
      */
@@ -595,61 +732,63 @@ export default async function handler(
             "Pagamento sem ID ou reference."
         }
       );
+
     }
-
-
-    /*
-     * -----------------------------------------------------
-     * DATABASE CLIENT
-     * -----------------------------------------------------
-     */
-
-    const sql =
-      neon(
-        process.env.DATABASE_URL
-      );
 
 
     /*
      * -----------------------------------------------------
      * REGISTAR EVENTO
      *
-     * A tabela precisa de UNIQUE(event_id).
+     * event_id possui UNIQUE.
+     *
+     * Portanto:
+     *
+     * primeiro webhook  → INSERT
+     * segundo webhook    → conflito
+     *
+     * Não processamos duas vezes.
      * -----------------------------------------------------
      */
 
     const inserted =
       await sql`
 
-      INSERT INTO pagar_webhook_events (
+        INSERT INTO pagar_webhook_events (
 
-        event_id,
-        event_type,
-        payment_id,
-        reference,
-        received_at
+          event_id,
+          event_type,
+          payment_id,
+          reference,
+          payload,
+          created_at,
+          processed_at
 
-      )
+        )
 
-      VALUES (
+        VALUES (
 
-        ${eventId},
-        ${eventType},
-        ${paymentId},
-        ${reference},
-        NOW()
+          ${eventId},
+          ${eventType},
+          ${paymentId},
+          ${reference},
+          ${JSON.stringify(event)}::jsonb,
+          NOW(),
+          NULL
 
-      )
+        )
 
-      ON CONFLICT (
-        event_id
-      )
+        ON CONFLICT (
+          event_id
+        )
 
-      DO NOTHING
+        DO NOTHING
 
-      RETURNING event_id
+        RETURNING
+          id,
+          event_id
 
-    `;
+      `;
 
 
     /*
@@ -672,6 +811,7 @@ export default async function handler(
             eventId
         }
       );
+
     }
 
 
@@ -680,11 +820,11 @@ export default async function handler(
      * LOCALIZAR PEDIDO
      *
      * Primeiro por reference.
-     * Se não houver, usa payment ID.
+     * Depois por payment_id.
      * -----------------------------------------------------
      */
 
-    let orders;
+    let orders = [];
 
 
     if (reference) {
@@ -692,54 +832,65 @@ export default async function handler(
       orders =
         await sql`
 
-        SELECT
+          SELECT
 
-          id,
-          order_id,
-          status,
-          amount,
-          usdt_amount,
-          rate,
-          payment,
-          pagar_payment_id,
-          blockchain_tx_hash,
-          wallet_address
+            id,
+            order_id,
+            status,
+            amount,
+            usdt_amount,
+            rate,
+            payment,
+            pagar_payment_id,
+            blockchain_tx_hash,
+            wallet_address
 
-        FROM orders
+          FROM orders
 
-        WHERE order_id =
-          ${reference}
+          WHERE order_id =
+            ${reference}
 
-        LIMIT 1
+          LIMIT 1
 
-      `;
+        `;
 
-    } else {
+    }
+
+
+    /*
+     * Se não encontrou por reference,
+     * tenta pelo ID da Pagar.
+     */
+
+    if (
+      orders.length === 0 &&
+      paymentId
+    ) {
 
       orders =
         await sql`
 
-        SELECT
+          SELECT
 
-          id,
-          order_id,
-          status,
-          amount,
-          usdt_amount,
-          rate,
-          payment,
-          pagar_payment_id,
-          blockchain_tx_hash,
-          wallet_address
+            id,
+            order_id,
+            status,
+            amount,
+            usdt_amount,
+            rate,
+            payment,
+            pagar_payment_id,
+            blockchain_tx_hash,
+            wallet_address
 
-        FROM orders
+          FROM orders
 
-        WHERE pagar_payment_id =
-          ${paymentId}
+          WHERE pagar_payment_id =
+            ${paymentId}
 
-        LIMIT 1
+          LIMIT 1
 
-      `;
+        `;
 
     }
 
@@ -766,10 +917,24 @@ export default async function handler(
 
 
       /*
-       * Retornamos 200 porque o evento já foi
-       * registado e não queremos provocar retries
-       * infinitos para um pedido inexistente.
+       * Marcar evento como processado,
+       * pois já foi recebido e registado.
        */
+
+      await sql`
+
+        UPDATE pagar_webhook_events
+
+        SET
+
+          processed_at =
+            NOW()
+
+        WHERE event_id =
+          ${eventId}
+
+      `;
+
 
       return json(
         res,
@@ -781,6 +946,7 @@ export default async function handler(
             eventId
         }
       );
+
     }
 
 
@@ -792,9 +958,6 @@ export default async function handler(
      * -----------------------------------------------------
      * VALIDAR PAYMENT ID
      * -----------------------------------------------------
-     *
-     * Se o pedido já tem payment ID, o webhook
-     * precisa corresponder ao mesmo pagamento.
      */
 
     if (
@@ -827,12 +990,13 @@ export default async function handler(
             "payment.id não corresponde ao pedido."
         }
       );
+
     }
 
 
     /*
      * -----------------------------------------------------
-     * VALIDAR REFERÊNCIA
+     * VALIDAR REFERENCE
      * -----------------------------------------------------
      */
 
@@ -852,6 +1016,7 @@ export default async function handler(
             "Reference não corresponde ao pedido."
         }
       );
+
     }
 
 
@@ -859,7 +1024,7 @@ export default async function handler(
      * -----------------------------------------------------
      * VALIDAR VALOR
      * -----------------------------------------------------
-     */
+ */
 
     const orderAmount =
       Number(
@@ -882,6 +1047,7 @@ export default async function handler(
             "Pagamento sem amountMzn válido."
         }
       );
+
     }
 
 
@@ -912,6 +1078,7 @@ export default async function handler(
             "O valor pago não corresponde ao valor do pedido."
         }
       );
+
     }
 
 
@@ -919,10 +1086,13 @@ export default async function handler(
      * -----------------------------------------------------
      * PAGAMENTO CONFIRMADO
      *
-     * A Pagar documenta payment.succeeded como
-     * confirmação final.
+     * SOMENTE:
      *
-     * Também verificamos status PAID.
+     * event = payment.succeeded
+     *
+     * E:
+     *
+     * status = PAID
      * -----------------------------------------------------
      */
 
@@ -942,7 +1112,8 @@ export default async function handler(
     if (confirmed) {
 
       /*
-       * Nunca substituir um pedido já concluído.
+       * Se já foi enviado USDT ou concluído,
+       * não fazer nada novamente.
        */
 
       if (
@@ -956,6 +1127,21 @@ export default async function handler(
         )
       ) {
 
+        await sql`
+
+          UPDATE pagar_webhook_events
+
+          SET
+
+            processed_at =
+              NOW()
+
+          WHERE event_id =
+            ${eventId}
+
+        `;
+
+
         return json(
           res,
           200,
@@ -968,57 +1154,78 @@ export default async function handler(
               order.status
           }
         );
+
       }
 
 
       /*
-       * Confirmar pagamento.
-       *
-       * A condição WHERE evita regressão
-       * de estado em pedidos já confirmados.
+       * ---------------------------------------------------
+       * CONFIRMAR PAGAMENTO
+       * ---------------------------------------------------
        */
 
       const updated =
         await sql`
 
-        UPDATE orders
+          UPDATE orders
 
-        SET
+          SET
 
-          status =
-            'PAYMENT_CONFIRMED',
+            status =
+              'PAYMENT_CONFIRMED',
 
-          pagar_payment_id =
-            COALESCE(
-              pagar_payment_id,
-              ${paymentId}
-            ),
+            pagar_payment_id =
+              COALESCE(
+                pagar_payment_id,
+                ${paymentId}
+              ),
 
-          updated_at =
-            NOW()
+            updated_at =
+              NOW()
 
-        WHERE id =
-          ${order.id}
+          WHERE id =
+            ${order.id}
 
           AND status NOT IN (
             'USDT_SENT',
             'COMPLETED'
           )
 
-        RETURNING
+          RETURNING
 
-          order_id,
-          status,
-          amount,
-          usdt_amount,
-          rate,
-          pagar_payment_id
+            order_id,
+            status,
+            amount,
+            usdt_amount,
+            rate,
+            pagar_payment_id
 
-      `;
+        `;
 
 
       const confirmedOrder =
         updated[0];
+
+
+      /*
+       * ---------------------------------------------------
+       * MARCAR EVENTO PROCESSADO
+       * ---------------------------------------------------
+       */
+
+      await sql`
+
+        UPDATE pagar_webhook_events
+
+        SET
+
+          processed_at =
+            NOW()
+
+        WHERE event_id =
+          ${eventId}
+
+      `;
 
 
       /*
@@ -1097,6 +1304,7 @@ export default async function handler(
 
         }
       );
+
     }
 
 
@@ -1111,16 +1319,17 @@ export default async function handler(
       "payment.failed"
     ) {
 
-      /*
-       * Não alterar um pedido que já foi confirmado.
-       */
-
       const currentStatus =
         String(
           order.status ||
           ""
         ).toUpperCase();
 
+
+      /*
+       * Nunca transformar um pedido já confirmado
+       * em FAILED.
+       */
 
       if (
         [
@@ -1131,6 +1340,21 @@ export default async function handler(
           currentStatus
         )
       ) {
+
+        await sql`
+
+          UPDATE pagar_webhook_events
+
+          SET
+
+            processed_at =
+              NOW()
+
+          WHERE event_id =
+            ${eventId}
+
+        `;
+
 
         return json(
           res,
@@ -1146,8 +1370,13 @@ export default async function handler(
               order.status
           }
         );
+
       }
 
+
+      /*
+       * Marcar pagamento como FAILED.
+       */
 
       await sql`
 
@@ -1173,11 +1402,31 @@ export default async function handler(
       `;
 
 
+      /*
+       * Marcar evento como processado.
+       */
+
+      await sql`
+
+        UPDATE pagar_webhook_events
+
+        SET
+
+          processed_at =
+            NOW()
+
+        WHERE event_id =
+          ${eventId}
+
+      `;
+
+
       return json(
         res,
         200,
         {
           success: true,
+
           confirmed: false,
 
           order: {
@@ -1206,16 +1455,33 @@ export default async function handler(
 
         }
       );
+
     }
 
 
     /*
      * -----------------------------------------------------
-     * PAYMENT AINDA NÃO FINALIZADO
+     * PENDING / PROCESSING
+     * -----------------------------------------------------
      *
-     * PENDING / PROCESSING não entregam nada.
+     * Não entregar USDT.
      * -----------------------------------------------------
      */
+
+    await sql`
+
+      UPDATE pagar_webhook_events
+
+      SET
+
+        processed_at =
+          NOW()
+
+      WHERE event_id =
+        ${eventId}
+
+    `;
+
 
     return json(
       res,
@@ -1274,5 +1540,7 @@ export default async function handler(
           "Erro interno ao processar webhook."
       }
     );
+
   }
+
 }
