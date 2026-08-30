@@ -51,8 +51,7 @@
       border-radius: 14px;
       padding: 20px;
       margin-bottom: 18px;
-      box-shadow:
-        0 4px 18px rgba(0,0,0,0.07);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.07);
     }
 
     h2 {
@@ -169,15 +168,6 @@
       font-weight: bold;
     }
 
-    .status {
-      display: inline-block;
-      padding: 5px 9px;
-      border-radius: 20px;
-      background: #e5e7eb;
-      font-size: 12px;
-      font-weight: bold;
-    }
-
     .hidden {
       display: none !important;
     }
@@ -200,6 +190,19 @@
       font-size: 12px;
       color: #6b7280;
     }
+
+    .conversion {
+      text-align: center;
+      font-size: 28px;
+      font-weight: bold;
+      padding: 18px 5px;
+      color: #111827;
+    }
+
+    .conversion span {
+      display: inline-block;
+      margin: 0 5px;
+    }
   </style>
 </head>
 
@@ -213,7 +216,7 @@
 <div class="container">
 
   <!-- =====================================================
-       CONVERSOR
+       COMPRAR USDT
   ====================================================== -->
 
   <section class="card">
@@ -235,9 +238,17 @@
 
     <div class="result">
 
+      <div
+        id="conversionDisplay"
+        class="conversion"
+      >
+        0 MZN → 0 USDT
+      </div>
+
       <div class="grid">
 
         <div class="stat">
+
           <div class="stat-title">
             Taxa
           </div>
@@ -248,9 +259,11 @@
           >
             1 USDT = 50 MZN
           </div>
+
         </div>
 
         <div class="stat">
+
           <div class="stat-title">
             Você recebe
           </div>
@@ -259,8 +272,9 @@
             class="stat-value"
             id="usdtPreview"
           >
-            0.000000 USDT
+            0 USDT
           </div>
+
         </div>
 
       </div>
@@ -535,10 +549,8 @@
 
   /*
    * =======================================================
-   * CONFIGURAÇÃO FRONTEND
+   * CONFIGURAÇÃO
    * =======================================================
-   *
-   * Nenhuma chave secreta deve aparecer aqui.
    */
 
   const CONFIG = {
@@ -577,7 +589,7 @@
 
   /*
    * =======================================================
-   * ESTADO LOCAL
+   * ESTADO
    * =======================================================
    */
 
@@ -596,10 +608,20 @@
   const usdtPreview =
     document.getElementById("usdtPreview");
 
+  const conversionDisplay =
+    document.getElementById(
+      "conversionDisplay"
+    );
+
 
   /*
    * =======================================================
    * CONVERSOR
+   *
+   * Exemplo:
+   *
+   * 1000 MZN → 20 USDT
+   *
    * =======================================================
    */
 
@@ -614,7 +636,10 @@
     ) {
 
       usdtPreview.textContent =
-        "0.000000 USDT";
+        "0 USDT";
+
+      conversionDisplay.textContent =
+        "0 MZN → 0 USDT";
 
       return;
     }
@@ -622,9 +647,37 @@
     const usdt =
       amount / CONFIG.rate;
 
-    usdtPreview.textContent =
-      usdt.toFixed(6) +
+
+    /*
+     * Remove zeros desnecessários.
+     *
+     * 20.000000 → 20
+     * 20.500000 → 20.5
+     */
+
+    const usdtFormatted =
+      Number(usdt.toFixed(6))
+        .toString();
+
+
+    const amountFormatted =
+      Number(amount)
+        .toLocaleString(
+          "pt-MZ"
+        );
+
+
+    conversionDisplay.textContent =
+      amountFormatted +
+      " MZN → " +
+      usdtFormatted +
       " USDT";
+
+
+    usdtPreview.textContent =
+      usdtFormatted +
+      " USDT";
+
   }
 
 
@@ -659,6 +712,7 @@
     element.classList.remove(
       "hidden"
     );
+
   }
 
 
@@ -691,7 +745,9 @@
         }
       );
 
+
     let data = null;
+
 
     try {
 
@@ -703,6 +759,7 @@
       data = null;
 
     }
+
 
     if (!response.ok) {
 
@@ -722,7 +779,9 @@
       throw error;
     }
 
+
     return data;
+
   }
 
 
@@ -744,11 +803,13 @@
         "orderResult"
       );
 
+
     const name =
       document
         .getElementById("name")
         .value
         .trim();
+
 
     const phone =
       document
@@ -756,10 +817,12 @@
         .value
         .trim();
 
+
     const payment =
       document
         .getElementById("paymentMethod")
         .value;
+
 
     const amount =
       Number(
@@ -867,31 +930,49 @@
         data.order;
 
 
+      const usdt =
+        Number(
+          currentOrder.usdt_amount
+        );
+
+
+      const usdtFormatted =
+        Number(
+          usdt.toFixed(6)
+        ).toString();
+
+
+      const amountFormatted =
+        Number(
+          currentOrder.amount
+        ).toLocaleString(
+          "pt-MZ"
+        );
+
+
       showResult(
         result,
 
         [
           "Pedido criado com sucesso.",
+
           "",
+
+          amountFormatted +
+            " MZN → " +
+            usdtFormatted +
+            " USDT",
+
+          "",
+
           "Pedido: " +
             currentOrder.order_id,
 
-          "Valor: " +
-            Number(
-              currentOrder.amount
-            ).toFixed(0) +
-            " MZN",
-
-          "USDT: " +
-            Number(
-              currentOrder.usdt_amount
-            ).toFixed(6),
-
           "Método: " +
-            currentOrder.payment.toUpperCase(),
+            String(
+              currentOrder.payment
+            ).toUpperCase()
 
-          "Estado: " +
-            currentOrder.status
         ].join("\n"),
 
         "ok"
@@ -905,8 +986,10 @@
 
       showResult(
         result,
+
         error.message ||
           "Não foi possível criar o pedido.",
+
         "error"
       );
 
@@ -952,27 +1035,49 @@
     }
 
 
+    const amount =
+      Number(
+        currentOrder.amount
+      );
+
+
+    const usdt =
+      Number(
+        currentOrder.usdt_amount
+      );
+
+
+    const amountFormatted =
+      amount.toLocaleString(
+        "pt-MZ"
+      );
+
+
+    const usdtFormatted =
+      Number(
+        usdt.toFixed(6)
+      ).toString();
+
+
     info.textContent =
       [
         "Pedido: " +
           currentOrder.order_id,
 
-        "Valor: " +
-          currentOrder.amount +
-          " MZN",
+        "",
 
-        "USDT: " +
-          Number(
-            currentOrder.usdt_amount
-          ).toFixed(6),
+        amountFormatted +
+          " MZN → " +
+          usdtFormatted +
+          " USDT",
+
+        "",
 
         "Método: " +
           String(
             currentOrder.payment
-          ).toUpperCase(),
+          ).toUpperCase()
 
-        "Estado: " +
-          currentOrder.status
       ].join("\n");
 
   }
@@ -1065,20 +1170,7 @@
         showResult(
           result,
 
-          [
-            "Pagamento confirmado.",
-
-            "",
-
-            "ID Pagar: " +
-              (
-                payment.id ||
-                "-"
-              ),
-
-            "Estado: " +
-              status
-          ].join("\n"),
+          "Pagamento confirmado.",
 
           "ok"
         );
@@ -1088,24 +1180,7 @@
         showResult(
           result,
 
-          [
-            "Pagamento iniciado.",
-
-            "",
-
-            "ID Pagar: " +
-              (
-                payment.id ||
-                "-"
-              ),
-
-            "Estado: " +
-              status,
-
-            "",
-
-            "Aguarde a confirmação do pagamento."
-          ].join("\n"),
+          "Pagamento iniciado.\n\nAguarde a confirmação do pagamento.",
 
           "warning"
         );
@@ -1117,8 +1192,10 @@
 
       showResult(
         result,
+
         error.message ||
           "Não foi possível iniciar o pagamento.",
+
         "error"
       );
 
@@ -1139,12 +1216,6 @@
    * =======================================================
    * VERIFICAR PAGAMENTO
    * =======================================================
-   *
-   * O endpoint /api/payment não é um endpoint de consulta.
-   * Portanto esta função informa o estado conhecido no frontend.
-   *
-   * A confirmação definitiva deverá vir do webhook/status
-   * implementado no backend.
    */
 
   async function checkPaymentStatus() {
@@ -1172,17 +1243,10 @@
     showResult(
       result,
 
-      [
-        "Pedido: " +
-          currentOrder.order_id,
-
-        "Estado atual conhecido: " +
-          currentOrder.status,
-
-        "",
-
-        "A confirmação definitiva do pagamento deve ser feita pelo servidor através da Pagar/webhook."
-      ].join("\n"),
+      "Pedido: " +
+        currentOrder.order_id +
+        "\n\n" +
+        "O estado definitivo do pagamento é confirmado pelo servidor através do webhook da Pagar.",
 
       "warning"
     );
@@ -1192,7 +1256,7 @@
 
   /*
    * =======================================================
-   * VALIDAR TRON ADDRESS
+   * VALIDAR TRON
    * =======================================================
    */
 
@@ -1230,7 +1294,7 @@
 
   /*
    * =======================================================
-   * CRIAR WITHDRAWAL
+   * CRIAR RETIRADA
    * =======================================================
    */
 
@@ -1246,6 +1310,7 @@
         "withdrawResult"
       );
 
+
     const address =
       document
         .getElementById(
@@ -1253,6 +1318,7 @@
         )
         .value
         .trim();
+
 
     const amount =
       document
@@ -1414,8 +1480,10 @@
 
       showResult(
         result,
+
         error.message ||
           "Não foi possível criar a retirada.",
+
         "error"
       );
 
@@ -1536,6 +1604,7 @@
                 ? "SIM"
                 : "NÃO"
             )
+
         ].join("\n"),
 
         "ok"
@@ -1550,8 +1619,10 @@
 
       showResult(
         status,
+
         error.message ||
           "Não foi possível consultar a carteira.",
+
         "error"
       );
 
