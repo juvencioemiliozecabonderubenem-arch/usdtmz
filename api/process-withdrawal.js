@@ -4,17 +4,38 @@ import TronWeb from "tronweb";
 /*
  * =========================================================
  * USDTMZ — PROCESS WITHDRAWAL
+ * ETAPA: SAFE_VALIDATION → TRANSACTION_READY
  * =========================================================
  *
- * MODO ATUAL:
+ * Este arquivo:
  *
- * - validação completa
- * - consulta blockchain
- * - consulta TRX
- * - consulta Energy
- * - consulta Bandwidth
- * - simulação da transferência
- * - NÃO transmite fundos
+ * ✓ exige retirada AUTHORIZED
+ * ✓ valida destino
+ * ✓ valida valor
+ * ✓ confirma carteira Mainnet
+ * ✓ confirma TRON_PRIVATE_KEY
+ * ✓ confirma que a chave corresponde à carteira
+ * ✓ consulta TRX
+ * ✓ consulta Energy
+ * ✓ consulta Bandwidth
+ * ✓ consulta saldo USDT real
+ * ✓ simula o contrato USDT
+ * ✓ cria a transação USDT sem transmiti-la
+ * ✓ retorna raw_data / raw_data_hex / txID
+ *
+ * NÃO FAZ:
+ *
+ * ✗ não assina
+ * ✗ não transmite
+ * ✗ não coloca chave privada na resposta
+ *
+ * Próxima etapa:
+ *
+ * TRANSACTION_READY
+ *       ↓
+ * assinatura autorizada
+ *       ↓
+ * broadcast
  *
  * =========================================================
  */
@@ -31,14 +52,17 @@ const USDT_DECIMALS = 6;
 const NETWORK = "TRON Mainnet";
 const ASSET = "USDT";
 
-/*
- * Mantemos desligado durante a validação.
- */
-const ENABLE_TRON_BROADCAST =
+const ENABLE_TRANSACTION_BUILD =
   String(
-    process.env.ENABLE_TRON_BROADCAST || ""
+    process.env.ENABLE_TRANSACTION_BUILD || "true"
   ).toLowerCase() === "true";
 
+
+/*
+ * =========================================================
+ * JSON
+ * =========================================================
+ */
 
 function json(res, status, data) {
   res.setHeader(
@@ -52,12 +76,24 @@ function json(res, status, data) {
 }
 
 
+/*
+ * =========================================================
+ * TRON ADDRESS
+ * =========================================================
+ */
+
 function isValidTronAddress(address) {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
     String(address || "").trim()
   );
 }
 
+
+/*
+ * =========================================================
+ * USDT PARSER
+ * =========================================================
+ */
 
 function parseUsdtAmount(value) {
   const text =
@@ -89,8 +125,15 @@ function parseUsdtAmount(value) {
 }
 
 
+/*
+ * =========================================================
+ * USDT FORMAT
+ * =========================================================
+ */
+
 function formatUsdtAmount(raw) {
-  const value = BigInt(raw);
+  const value =
+    BigInt(raw);
 
   const whole =
     value / 1_000_000n;
@@ -108,6 +151,17 @@ function formatUsdtAmount(raw) {
   return `${whole}.${decimal}`;
 }
 
+
+/*
+ * =========================================================
+ * PRIVATE KEY
+ * =========================================================
+ *
+ * A chave nunca é retornada.
+ * Ela somente é usada internamente para
+ * confirmar a carteira do servidor.
+ * =========================================================
+ */
 
 function getPrivateKey() {
   const key =
@@ -140,6 +194,12 @@ function getPrivateKey() {
 }
 
 
+/*
+ * =========================================================
+ * TRONWEB
+ * =========================================================
+ */
+
 function createTronWeb() {
   return new TronWeb({
     fullHost: TRON_HOST,
@@ -148,15 +208,23 @@ function createTronWeb() {
 }
 
 
+/*
+ * =========================================================
+ * ENDEREÇO DERIVADO DA CHAVE
+ * =========================================================
+ */
+
 function getServerAddress(tronWeb) {
   const address =
     tronWeb.address.fromPrivateKey(
       getPrivateKey()
     );
 
-  if (!isValidTronAddress(address)) {
+  if (
+    !isValidTronAddress(address)
+  ) {
     throw new Error(
-      "A chave privada não corresponde a um endereço TRON válido."
+      "A chave privada não produziu um endereço TRON válido."
     );
   }
 
@@ -166,7 +234,7 @@ function getServerAddress(tronWeb) {
 
 /*
  * =========================================================
- * CONSULTAR RESOURCES
+ * RESOURCES
  * =========================================================
  */
 
@@ -180,53 +248,68 @@ async function getAccountResources(
     );
 
   const energyLimit =
-    Number(resources?.EnergyLimit || 0);
+    Number(
+      resources?.EnergyLimit || 0
+    );
 
   const energyUsed =
-    Number(resources?.EnergyUsed || 0);
+    Number(
+      resources?.EnergyUsed || 0
+    );
 
   const energyRemaining =
     Math.max(
       0,
-      energyLimit - energyUsed
+      energyLimit -
+      energyUsed
     );
 
   const bandwidthLimit =
-    Number(resources?.NetLimit || 0);
+    Number(
+      resources?.NetLimit || 0
+    );
 
   const bandwidthUsed =
-    Number(resources?.NetUsed || 0);
+    Number(
+      resources?.NetUsed || 0
+    );
 
   const bandwidthRemaining =
     Math.max(
       0,
-      bandwidthLimit - bandwidthUsed
+      bandwidthLimit -
+      bandwidthUsed
     );
 
   return {
-    energy_limit: energyLimit,
-    energy_used: energyUsed,
-    energy_remaining: energyRemaining,
+    energy_limit:
+      energyLimit,
 
-    bandwidth_limit: bandwidthLimit,
-    bandwidth_used: bandwidthUsed,
-    bandwidth_remaining: bandwidthRemaining,
+    energy_used:
+      energyUsed,
 
-    raw: resources
+    energy_remaining:
+      energyRemaining,
+
+    bandwidth_limit:
+      bandwidthLimit,
+
+    bandwidth_used:
+      bandwidthUsed,
+
+    bandwidth_remaining:
+      bandwidthRemaining
   };
 }
 
 
 /*
  * =========================================================
- * SIMULAR TRANSFERÊNCIA USDT
+ * SIMULAÇÃO USDT
  * =========================================================
  *
  * Não transmite.
- * Não altera blockchain.
- *
- * triggerconstantcontract permite prever
- * a execução e retornar energy_used.
+ * =========================================================
  */
 
 async function simulateUsdtTransfer(
@@ -250,19 +333,19 @@ async function simulateUsdtTransfer(
       destination
     );
 
-  /*
-   * transfer(address,uint256)
-   *
-   * address = 32 bytes
-   * uint256  = 32 bytes
-   */
-  const parameter =
+  const destinationParameter =
     destinationHex
       .replace(/^41/, "")
-      .padStart(64, "0") +
+      .padStart(64, "0");
+
+  const amountParameter =
     BigInt(rawAmount)
       .toString(16)
       .padStart(64, "0");
+
+  const parameter =
+    destinationParameter +
+    amountParameter;
 
   const response =
     await fetch(
@@ -274,43 +357,110 @@ async function simulateUsdtTransfer(
           "Content-Type":
             "application/json",
 
-          ...(process.env.TRONGRID_API_KEY
-            ? {
-                "TRON-PRO-API-KEY":
-                  process.env.TRONGRID_API_KEY
-              }
-            : {})
+          "TRON-PRO-API-KEY":
+            process.env.TRONGRID_API_KEY
         },
 
-        body: JSON.stringify({
-          owner_address:
-            ownerHex,
+        body:
+          JSON.stringify({
+            owner_address:
+              ownerHex,
 
-          contract_address:
-            contractHex,
+            contract_address:
+              contractHex,
 
-          function_selector:
-            "transfer(address,uint256)",
+            function_selector:
+              "transfer(address,uint256)",
 
-          parameter,
+            parameter,
 
-          call_value: 0,
+            call_value:
+              0,
 
-          visible: false
-        })
+            visible:
+              false
+          })
       }
     );
-
-  if (!response.ok) {
-    throw new Error(
-      `Falha na simulação TRON: HTTP ${response.status}`
-    );
-  }
 
   const data =
     await response.json();
 
+  if (!response.ok) {
+    throw new Error(
+      `TRONGrid simulation HTTP ${response.status}`
+    );
+  }
+
   return data;
+}
+
+
+/*
+ * =========================================================
+ * CRIAR TRANSAÇÃO USDT
+ * =========================================================
+ *
+ * IMPORTANTE:
+ *
+ * transactionBuilder.triggerSmartContract()
+ * apenas constrói a transação.
+ *
+ * Não fazemos:
+ *
+ * tronWeb.trx.sign()
+ *
+ * nem:
+ *
+ * tronWeb.trx.sendRawTransaction()
+ *
+ * nesta etapa.
+ * =========================================================
+ */
+
+async function buildUsdtTransaction(
+  tronWeb,
+  ownerAddress,
+  destination,
+  rawAmount
+) {
+  const functionSelector =
+    "transfer(address,uint256)";
+
+  const parameter = [
+    {
+      type: "address",
+      value: destination
+    },
+    {
+      type: "uint256",
+      value: rawAmount.toString()
+    }
+  ];
+
+  const result =
+    await tronWeb.transactionBuilder
+      .triggerSmartContract(
+        USDT_CONTRACT,
+        functionSelector,
+        {
+          feeLimit:
+            100_000_000
+        },
+        parameter,
+        ownerAddress
+      );
+
+  if (
+    !result ||
+    !result.transaction
+  ) {
+    throw new Error(
+      "TRON não retornou uma transação válida."
+    );
+  }
+
+  return result.transaction;
 }
 
 
@@ -342,10 +492,16 @@ export default async function handler(
   }
 
   try {
+
     /*
+     * =====================================================
      * CONFIGURAÇÃO
+     * =====================================================
      */
-    if (!process.env.DATABASE_URL) {
+
+    if (
+      !process.env.DATABASE_URL
+    ) {
       return json(
         res,
         500,
@@ -357,7 +513,9 @@ export default async function handler(
       );
     }
 
-    if (!process.env.TRONGRID_API_KEY) {
+    if (
+      !process.env.TRONGRID_API_KEY
+    ) {
       return json(
         res,
         500,
@@ -369,10 +527,32 @@ export default async function handler(
       );
     }
 
+    if (
+      !process.env.TRON_PRIVATE_KEY
+    ) {
+      return json(
+        res,
+        500,
+        {
+          success: false,
+          error:
+            "TRON_PRIVATE_KEY não configurada."
+        }
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * DATABASE
+     * =====================================================
+     */
+
     const sql =
       neon(
         process.env.DATABASE_URL
       );
+
 
     const body =
       req.body || {};
@@ -381,6 +561,7 @@ export default async function handler(
       String(
         body.withdrawal_id || ""
       ).trim();
+
 
     if (!withdrawalId) {
       return json(
@@ -394,9 +575,13 @@ export default async function handler(
       );
     }
 
+
     /*
-     * LOCALIZAR RETIRADA
+     * =====================================================
+     * RETIRADA
+     * =====================================================
      */
+
     const withdrawals =
       await sql`
         SELECT
@@ -420,7 +605,10 @@ export default async function handler(
         LIMIT 1
       `;
 
-    if (withdrawals.length === 0) {
+
+    if (
+      withdrawals.length === 0
+    ) {
       return json(
         res,
         404,
@@ -432,32 +620,41 @@ export default async function handler(
       );
     }
 
+
     const withdrawal =
       withdrawals[0];
 
-    const currentStatus =
+
+    const status =
       String(
         withdrawal.status || ""
       ).toUpperCase();
 
+
     /*
-     * JÁ COMPLETADA
+     * =====================================================
+     * ESTADOS FINAIS
+     * =====================================================
      */
+
     if (
-      currentStatus ===
-      "COMPLETED"
+      status === "COMPLETED"
     ) {
       return json(
         res,
         200,
         {
           success: true,
-          already_completed: true,
+          already_completed:
+            true,
+
           withdrawal: {
             withdrawal_id:
               withdrawal.withdrawal_id,
+
             status:
               withdrawal.status,
+
             tx_hash:
               withdrawal.tx_hash
           }
@@ -465,35 +662,9 @@ export default async function handler(
       );
     }
 
-    /*
-     * JÁ TEM TX HASH
-     */
-    if (withdrawal.tx_hash) {
-      return json(
-        res,
-        409,
-        {
-          success: false,
-          error:
-            "Esta retirada já possui TX hash.",
-          withdrawal: {
-            withdrawal_id:
-              withdrawal.withdrawal_id,
-            status:
-              withdrawal.status,
-            tx_hash:
-              withdrawal.tx_hash
-          }
-        }
-      );
-    }
 
-    /*
-     * SOMENTE AUTHORIZED
-     */
     if (
-      currentStatus !==
-      "AUTHORIZED"
+      withdrawal.tx_hash
     ) {
       return json(
         res,
@@ -501,10 +672,34 @@ export default async function handler(
         {
           success: false,
           error:
-            "A retirada precisa estar AUTHORIZED antes do processamento.",
+            "Esta retirada já possui TX hash."
+        }
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * AUTHORIZATION
+     * =====================================================
+     */
+
+    if (
+      status !== "AUTHORIZED"
+    ) {
+      return json(
+        res,
+        409,
+        {
+          success: false,
+
+          error:
+            "A retirada precisa estar AUTHORIZED antes da preparação.",
+
           withdrawal: {
             withdrawal_id:
               withdrawal.withdrawal_id,
+
             status:
               withdrawal.status
           }
@@ -512,13 +707,18 @@ export default async function handler(
       );
     }
 
+
     /*
+     * =====================================================
      * ASSET
+     * =====================================================
      */
+
     if (
       String(
-        withdrawal.asset
-      ).toUpperCase() !== ASSET
+        withdrawal.asset || ""
+      ).toUpperCase() !==
+      ASSET
     ) {
       return json(
         res,
@@ -526,18 +726,23 @@ export default async function handler(
         {
           success: false,
           error:
-            "Asset da retirada não é USDT."
+            "Asset inválido. Esperado USDT."
         }
       );
     }
 
+
     /*
+     * =====================================================
      * NETWORK
+     * =====================================================
      */
+
     if (
       String(
-        withdrawal.network
-      ) !== NETWORK
+        withdrawal.network || ""
+      ) !==
+      NETWORK
     ) {
       return json(
         res,
@@ -545,19 +750,24 @@ export default async function handler(
         {
           success: false,
           error:
-            "A retirada não está configurada para TRON Mainnet."
+            "A retirada não está em TRON Mainnet."
         }
       );
     }
 
+
     /*
+     * =====================================================
      * DESTINO
+     * =====================================================
      */
+
     const destination =
       String(
         withdrawal.destination_address ||
         ""
       ).trim();
+
 
     if (
       !isValidTronAddress(
@@ -575,14 +785,19 @@ export default async function handler(
       );
     }
 
+
     /*
-     * VALOR LÍQUIDO
+     * =====================================================
+     * VALOR
+     * =====================================================
      */
+
     const rawAmount =
       parseUsdtAmount(
         withdrawal.amount_to_send ??
         withdrawal.amount
       );
+
 
     if (
       rawAmount === null
@@ -593,19 +808,24 @@ export default async function handler(
         {
           success: false,
           error:
-            "Valor USDT da retirada inválido."
+            "Valor USDT inválido."
         }
       );
     }
 
-    const amountFormatted =
+
+    const amountToSend =
       formatUsdtAmount(
         rawAmount
       );
 
+
     /*
-     * LOCALIZAR CARTEIRA
+     * =====================================================
+     * CARTEIRA DO SISTEMA
+     * =====================================================
      */
+
     const wallets =
       await sql`
         SELECT
@@ -626,26 +846,32 @@ export default async function handler(
         LIMIT 1
       `;
 
-    if (wallets.length === 0) {
+
+    if (
+      wallets.length === 0
+    ) {
       return json(
         res,
         404,
         {
           success: false,
           error:
-            "Carteira USDT TRON Mainnet não encontrada."
+            "Carteira USDT Mainnet não encontrada."
         }
       );
     }
 
+
     const wallet =
       wallets[0];
+
 
     const walletAddress =
       String(
         wallet.wallet_address ||
         ""
       ).trim();
+
 
     if (
       !isValidTronAddress(
@@ -658,24 +884,33 @@ export default async function handler(
         {
           success: false,
           error:
-            "Endereço da carteira USDT inválido."
+            "Carteira TRON configurada inválida."
         }
       );
     }
 
+
     /*
+     * =====================================================
      * TRONWEB
+     * =====================================================
      */
+
     const tronWeb =
       createTronWeb();
 
+
     /*
+     * =====================================================
      * CONFIRMAR CHAVE
+     * =====================================================
      */
+
     const serverAddress =
       getServerAddress(
         tronWeb
       );
+
 
     if (
       serverAddress !==
@@ -687,21 +922,28 @@ export default async function handler(
         {
           success: false,
           error:
-            "A TRON_PRIVATE_KEY não corresponde à carteira configurada no banco."
+            "A TRON_PRIVATE_KEY não corresponde à carteira USDTMZ."
         }
       );
     }
 
+
     /*
+     * =====================================================
      * TRX
+     * =====================================================
      */
+
     const trxSun =
       await tronWeb.trx.getBalance(
         walletAddress
       );
 
+
     const trxBalance =
-      Number(trxSun) / 1_000_000;
+      Number(trxSun) /
+      1_000_000;
+
 
     if (
       !Number.isFinite(
@@ -714,23 +956,31 @@ export default async function handler(
         {
           success: false,
           error:
-            "Não foi possível consultar o saldo TRX."
+            "Não foi possível consultar TRX."
         }
       );
     }
 
+
     /*
+     * =====================================================
      * RESOURCES
+     * =====================================================
      */
+
     const resources =
       await getAccountResources(
         tronWeb,
         walletAddress
       );
 
+
     /*
-     * CONTRATO
+     * =====================================================
+     * CONTRATO USDT
+     * =====================================================
      */
+
     const contract =
       await tronWeb
         .contract()
@@ -738,9 +988,13 @@ export default async function handler(
           USDT_CONTRACT
         );
 
+
     /*
+     * =====================================================
      * SALDO USDT REAL
+     * =====================================================
      */
+
     const blockchainRawBalance =
       await contract
         .balanceOf(
@@ -748,12 +1002,14 @@ export default async function handler(
         )
         .call();
 
+
     const blockchainBalance =
       BigInt(
         String(
           blockchainRawBalance
         )
       );
+
 
     if (
       blockchainBalance <
@@ -764,8 +1020,9 @@ export default async function handler(
         400,
         {
           success: false,
+
           error:
-            "Saldo USDT real insuficiente na carteira TRON.",
+            "Saldo USDT real insuficiente na carteira.",
 
           blockchain_balance:
             formatUsdtAmount(
@@ -773,17 +1030,23 @@ export default async function handler(
             ),
 
           requested:
-            amountFormatted
+            amountToSend
         }
       );
     }
 
+
     /*
+     * =====================================================
      * SIMULAÇÃO
+     * =====================================================
      */
-    let simulation = null;
+
+    let simulation;
+
 
     try {
+
       simulation =
         await simulateUsdtTransfer(
           tronWeb,
@@ -791,95 +1054,81 @@ export default async function handler(
           destination,
           rawAmount
         );
-    } catch (simulationError) {
+
+    } catch (error) {
+
       console.error(
-        "USDTMZ TRON SIMULATION ERROR:",
-        simulationError?.message ||
-        simulationError
+        "USDTMZ SIMULATION ERROR:",
+        error?.message ||
+        error
+      );
+
+      return json(
+        res,
+        502,
+        {
+          success: false,
+          error:
+            "Não foi possível simular a transferência USDT."
+        }
       );
     }
 
+
     /*
-     * ENERGY ESTIMADA
+     * =====================================================
+     * RESULTADO DA SIMULAÇÃO
+     * =====================================================
      */
-    const energyUsed =
+
+    const simulationFailed =
+      simulation?.result?.result ===
+      false;
+
+
+    if (
+      simulationFailed
+    ) {
+      return json(
+        res,
+        400,
+        {
+          success: false,
+
+          error:
+            "A simulação TRC-20 falhou.",
+
+          simulation
+        }
+      );
+    }
+
+
+    const energyEstimated =
       Number(
         simulation?.energy_used ||
         simulation?.energy_required ||
         0
       );
 
-    const energyAvailable =
-      resources.energy_remaining;
 
     const energyShortfall =
       Math.max(
         0,
-        energyUsed -
-        energyAvailable
+        energyEstimated -
+        resources.energy_remaining
       );
 
-    /*
-     * BANDWIDTH
-     *
-     * A simulação não consome Bandwidth real.
-     * Portanto usamos o recurso disponível
-     * como informação de validação.
-     */
-    const bandwidthAvailable =
-      resources.bandwidth_remaining;
 
     /*
-     * Não afirmamos que o TRX disponível
-     * é suficiente sem conhecer a taxa
-     * atual de Energy da rede.
+     * =====================================================
+     * TRANSACTION READY
+     * =====================================================
      */
-    const resourceCheck = {
-      energy_estimated:
-        energyUsed,
 
-      energy_available:
-        energyAvailable,
-
-      energy_shortfall:
-        energyShortfall,
-
-      bandwidth_available:
-        bandwidthAvailable,
-
-      trx_balance:
-        trxBalance
-    };
-
-    /*
-     * Se a simulação indicar falha,
-     * não continuamos.
-     */
-    const simulationFailed =
-      simulation &&
-      simulation.result &&
-      simulation.result.result === false;
-
-    if (simulationFailed) {
-      return json(
-        res,
-        400,
-        {
-          success: false,
-          error:
-            "A simulação da transferência USDT falhou. Nenhum broadcast foi realizado.",
-
-          simulation,
-          resources:
-            resourceCheck
-        }
-      );
-    }
-
-    /*
-     * MODO DE SEGURANÇA
-     */
-    if (!ENABLE_TRON_BROADCAST) {
+    if (
+      !ENABLE_TRANSACTION_BUILD
+    ) {
       return json(
         res,
         200,
@@ -893,78 +1142,185 @@ export default async function handler(
             false,
 
           message:
-            "Validação concluída. Nenhuma transação foi transmitida.",
+            "SAFE_VALIDATION concluída. A construção da transação está desligada.",
 
-          withdrawal: {
-            withdrawal_id:
-              withdrawal.withdrawal_id,
-
-            amount_requested:
-              withdrawal.amount_requested,
-
-            withdrawal_fee:
-              withdrawal.withdrawal_fee,
-
-            amount_to_send:
-              amountFormatted,
-
-            destination_address:
-              destination,
-
-            asset:
-              ASSET,
-
-            network:
-              NETWORK,
-
-            status:
-              withdrawal.status
-          },
-
-          wallet: {
-            address:
-              walletAddress,
-
-            blockchain_usdt_balance:
-              formatUsdtAmount(
-                blockchainBalance
-              ),
-
-            trx_balance:
-              trxBalance
-          },
-
-          resources:
-            resourceCheck,
-
-          simulation
+          withdrawal_id:
+            withdrawal.withdrawal_id
         }
       );
     }
 
+
+    let transaction;
+
+
+    try {
+
+      transaction =
+        await buildUsdtTransaction(
+          tronWeb,
+          walletAddress,
+          destination,
+          rawAmount
+        );
+
+    } catch (error) {
+
+      console.error(
+        "USDTMZ BUILD TRANSACTION ERROR:",
+        error?.message ||
+        error
+      );
+
+      return json(
+        res,
+        502,
+        {
+          success: false,
+
+          error:
+            "Não foi possível construir a transação TRC-20.",
+
+          details:
+            error?.message ||
+            String(error)
+        }
+      );
+    }
+
+
     /*
      * =====================================================
-     * BLOCO DE BROADCAST
+     * RESPOSTA FINAL
      * =====================================================
      *
-     * Não ativado nesta versão.
-     *
-     * A validação acima é a barreira
-     * antes de qualquer transmissão.
+     * NÃO há assinatura.
+     * NÃO há broadcast.
+     * NÃO há chave privada.
      * =====================================================
      */
 
     return json(
       res,
-      403,
+      200,
       {
-        success: false,
-        error:
-          "Broadcast real não está disponível nesta versão de validação."
+
+        success:
+          true,
+
+        mode:
+          "TRANSACTION_READY",
+
+        broadcasted:
+          false,
+
+        withdrawal_id:
+          withdrawal.withdrawal_id,
+
+        sender:
+          walletAddress,
+
+        destination:
+          destination,
+
+        asset:
+          ASSET,
+
+        network:
+          NETWORK,
+
+        standard:
+          "TRC-20",
+
+        contract:
+          USDT_CONTRACT,
+
+        amount_requested:
+          withdrawal.amount_requested,
+
+        withdrawal_fee:
+          withdrawal.withdrawal_fee,
+
+        amount_to_send:
+          amountToSend,
+
+        transaction: {
+
+          txID:
+            transaction.txID,
+
+          raw_data:
+            transaction.raw_data,
+
+          raw_data_hex:
+            transaction.raw_data_hex,
+
+          visible:
+            false
+        },
+
+        resources: {
+
+          trx_balance:
+            trxBalance,
+
+          energy_available:
+            resources.energy_remaining,
+
+          energy_estimated:
+            energyEstimated,
+
+          energy_shortfall:
+            energyShortfall,
+
+          bandwidth_available:
+            resources.bandwidth_remaining
+
+        },
+
+        validation: {
+
+          authorized:
+            true,
+
+          wallet_matches_private_key:
+            true,
+
+          usdt_balance_ok:
+            true,
+
+          trx_checked:
+            true,
+
+          energy_checked:
+            true,
+
+          bandwidth_checked:
+            true,
+
+          simulation_ok:
+            true
+
+        },
+
+        signature: {
+
+          required:
+            true,
+
+          performed:
+            false,
+
+          private_key_included:
+            false
+
+        }
+
       }
     );
 
   } catch (error) {
+
     console.error(
       "USDTMZ PROCESS WITHDRAWAL ERROR:",
       error?.message ||
@@ -976,8 +1332,13 @@ export default async function handler(
       500,
       {
         success: false,
+
         error:
-          "Erro interno ao processar a retirada."
+          "Erro interno ao preparar a retirada.",
+
+        details:
+          error?.message ||
+          String(error)
       }
     );
   }
