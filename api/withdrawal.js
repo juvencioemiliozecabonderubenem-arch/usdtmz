@@ -9,6 +9,16 @@ const MAX_WITHDRAWAL_USDT = 1_000_000;
 const NETWORK = "TRON Mainnet";
 const ASSET = "USDT";
 
+/*
+ * Taxa comercial do USDTMZ.
+ *
+ * Exemplo:
+ * pedido = 10 USDT
+ * taxa = 1 USDT
+ * envio = 9 USDT
+ */
+const WITHDRAWAL_FEE_USDT = 1;
+
 function isValidTronAddress(address) {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
     String(address || "").trim()
@@ -24,8 +34,7 @@ function parseUsdtAmount(value) {
 
   const [whole, decimal = ""] = text.split(".");
 
-  const padded =
-    decimal.padEnd(USDT_DECIMALS, "0");
+  const padded = decimal.padEnd(USDT_DECIMALS, "0");
 
   const raw =
     BigInt(whole) * 1_000_000n +
@@ -61,416 +70,272 @@ function formatUsdtAmount(raw) {
 }
 
 function numericToRaw(value) {
-  const text =
-    String(value ?? "0").trim();
-
-  return parseUsdtAmount(text) || 0n;
+  return parseUsdtAmount(value) || 0n;
 }
 
 export default async function handler(req, res) {
-
-  /*
-   * =========================
-   * MÉTODO
-   * =========================
-   */
-
   if (req.method !== "POST") {
-
     return res.status(405).json({
       success: false,
       error: "Método não permitido."
     });
-
   }
 
-
   try {
-
-    /*
-     * =========================
-     * DATABASE
-     * =========================
-     */
-
     if (!process.env.DATABASE_URL) {
-
       return res.status(500).json({
         success: false,
-        error:
-          "DATABASE_URL não configurada no Vercel."
+        error: "DATABASE_URL não configurada no Vercel."
       });
-
     }
 
-    const sql =
-      neon(process.env.DATABASE_URL);
+    const sql = neon(process.env.DATABASE_URL);
 
-
-    /*
-     * =========================
-     * DADOS RECEBIDOS
-     * =========================
-     */
-
-    const body =
-      req.body || {};
+    const body = req.body || {};
 
     const address =
-      String(
-        body.address || ""
-      ).trim();
+      String(body.address || "").trim();
 
     const amount =
-      String(
-        body.amount ?? ""
-      ).trim();
-
+      String(body.amount ?? "").trim();
 
     /*
-     * =========================
-     * VALIDAR ENDEREÇO
-     * =========================
+     * VALIDA ENDEREÇO
      */
-
     if (!isValidTronAddress(address)) {
-
       return res.status(400).json({
         success: false,
-        error:
-          "Endereço TRON inválido."
+        error: "Endereço TRON inválido."
       });
-
     }
 
-
     /*
-     * =========================
-     * VALIDAR VALOR
-     * =========================
+     * VALIDA VALOR SOLICITADO
      */
-
-    const rawAmount =
+    const requestedRaw =
       parseUsdtAmount(amount);
 
-    if (rawAmount === null) {
-
+    if (requestedRaw === null) {
       return res.status(400).json({
         success: false,
         error:
           "Valor USDT inválido. Use até 6 casas decimais."
       });
-
     }
 
+    /*
+     * TAXA
+     */
+    const feeRaw =
+      parseUsdtAmount(
+        WITHDRAWAL_FEE_USDT.toString()
+      );
 
-    const amountFormatted =
-      formatUsdtAmount(rawAmount);
-
+    if (feeRaw === null) {
+      return res.status(500).json({
+        success: false,
+        error: "Configuração de taxa inválida."
+      });
+    }
 
     /*
-     * =========================
-     * LOCALIZAR CARTEIRA
-     * =========================
+     * NÃO PERMITIR PEDIDO IGUAL OU MENOR À TAXA
      */
+    if (requestedRaw <= feeRaw) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "O valor solicitado deve ser maior que a taxa de retirada.",
+        requested:
+          formatUsdtAmount(requestedRaw),
+        fee:
+          formatUsdtAmount(feeRaw)
+      });
+    }
 
-    const wallets =
-      await sql`
+    const amountToSendRaw =
+      requestedRaw - feeRaw;
 
-        SELECT
-          id,
-          wallet_address,
-          network,
-          asset,
-          balance,
-          status
+    const amountRequested =
+      formatUsdtAmount(requestedRaw);
 
-        FROM wallets
+    const withdrawalFee =
+      formatUsdtAmount(feeRaw);
 
-        WHERE network = ${NETWORK}
+    const amountToSend =
+      formatUsdtAmount(amountToSendRaw);
 
-          AND asset = ${ASSET}
-
-          AND status = 'mainnet'
-
-        ORDER BY id DESC
-
-        LIMIT 1
-
-      `;
-
+    /*
+     * LOCALIZAR CARTEIRA
+     */
+    const wallets = await sql`
+      SELECT
+        id,
+        wallet_address,
+        network,
+        asset,
+        balance,
+        status
+      FROM wallets
+      WHERE network = ${NETWORK}
+        AND asset = ${ASSET}
+        AND status = 'mainnet'
+      ORDER BY id DESC
+      LIMIT 1
+    `;
 
     if (wallets.length === 0) {
-
       return res.status(404).json({
         success: false,
         error:
           "Nenhuma carteira USDT TRON Mainnet configurada."
       });
-
     }
 
-
-    const wallet =
-      wallets[0];
-
-
-    /*
-     * =========================
-     * VALIDAR CARTEIRA
-     * =========================
-     */
+    const wallet = wallets[0];
 
     const walletAddress =
-      String(
-        wallet.wallet_address || ""
-      ).trim();
-
+      String(wallet.wallet_address || "").trim();
 
     if (!isValidTronAddress(walletAddress)) {
-
       return res.status(500).json({
         success: false,
         error:
           "A carteira Mainnet configurada é inválida."
       });
-
     }
 
-
     /*
-     * =========================
-     * SALDO
-     * =========================
+     * SALDO INTERNO
      *
-     * O saldo é lido da tabela wallets.
-     *
-     * IMPORTANTE:
-     * esta etapa NÃO modifica o saldo.
+     * O saldo precisa cobrir o valor solicitado
+     * incluindo a taxa.
      */
-
     const walletRawBalance =
       numericToRaw(wallet.balance);
 
-
-    /*
-     * =========================
-     * VERIFICAR SALDO
-     * =========================
-     */
-
-    if (
-      walletRawBalance <
-      rawAmount
-    ) {
-
+    if (walletRawBalance < requestedRaw) {
       return res.status(400).json({
-
         success: false,
-
         error:
           "Saldo USDT insuficiente para esta retirada.",
-
         wallet: {
-
-          network:
-            NETWORK,
-
-          asset:
-            ASSET,
-
+          network: NETWORK,
+          asset: ASSET,
           balance:
-            formatUsdtAmount(
-              walletRawBalance
-            ),
-
+            formatUsdtAmount(walletRawBalance),
           requested:
-            amountFormatted
-
+            amountRequested,
+          fee:
+            withdrawalFee,
+          amount_to_send:
+            amountToSend
         }
-
       });
-
     }
 
-
     /*
-     * =========================
-     * VERIFICAR RETIRADAS
-     * =========================
-     *
-     * Não permitimos criar outra
-     * retirada PENDING para o mesmo
-     * destino e valor simultaneamente.
+     * DUPLICAÇÃO
      */
-
-    const duplicated =
-      await sql`
-
-        SELECT
-          id,
-          withdrawal_id,
-          status
-
-        FROM withdrawals
-
-        WHERE destination_address =
-          ${address}
-
-          AND amount =
-          ${amountFormatted}
-
-          AND status IN (
-            'PENDING',
-            'AUTHORIZED',
-            'PROCESSING'
-          )
-
-        LIMIT 1
-
-      `;
-
+    const duplicated = await sql`
+      SELECT
+        id,
+        withdrawal_id,
+        status
+      FROM withdrawals
+      WHERE destination_address = ${address}
+        AND amount_to_send = ${amountToSend}
+        AND status IN (
+          'PENDING',
+          'AUTHORIZED',
+          'PROCESSING'
+        )
+      LIMIT 1
+    `;
 
     if (duplicated.length > 0) {
-
       return res.status(409).json({
-
         success: false,
-
         error:
           "Já existe uma retirada pendente para este endereço e valor.",
-
         withdrawal: {
-
           withdrawal_id:
             duplicated[0].withdrawal_id,
-
           status:
             duplicated[0].status
-
         }
-
       });
-
     }
 
-
     /*
-     * =========================
      * IDENTIFICADORES
-     * =========================
      */
-
     const withdrawalId =
       "WD-" +
       Date.now()
         .toString(36)
         .toUpperCase();
 
-    const orderId =
-      withdrawalId;
-
+    const orderId = withdrawalId;
 
     /*
-     * =========================
      * CRIAR RETIRADA
-     * =========================
      *
-     * A retirada fica PENDING.
-     *
-     * Nenhuma transação é enviada
-     * para a TRON nesta etapa.
+     * amount = valor líquido que será enviado.
      */
+    const result = await sql`
+      INSERT INTO withdrawals (
+        withdrawal_id,
+        destination_address,
+        asset,
+        network,
+        amount,
+        status,
+        tx_hash,
+        order_id,
+        amount_requested,
+        withdrawal_fee,
+        amount_to_send
+      )
+      VALUES (
+        ${withdrawalId},
+        ${address},
+        ${ASSET},
+        ${NETWORK},
+        ${amountToSend},
+        'PENDING',
+        NULL,
+        ${orderId},
+        ${amountRequested},
+        ${withdrawalFee},
+        ${amountToSend}
+      )
+      RETURNING
+        id,
+        withdrawal_id,
+        destination_address,
+        asset,
+        network,
+        amount,
+        status,
+        tx_hash,
+        order_id,
+        amount_requested,
+        withdrawal_fee,
+        amount_to_send,
+        created_at,
+        updated_at
+    `;
 
-    const result =
-      await sql`
-
-        INSERT INTO withdrawals (
-
-          withdrawal_id,
-
-          destination_address,
-
-          asset,
-
-          network,
-
-          amount,
-
-          status,
-
-          tx_hash,
-
-          order_id
-
-        )
-
-        VALUES (
-
-          ${withdrawalId},
-
-          ${address},
-
-          ${ASSET},
-
-          ${NETWORK},
-
-          ${amountFormatted},
-
-          'PENDING',
-
-          NULL,
-
-          ${orderId}
-
-        )
-
-        RETURNING
-
-          id,
-
-          withdrawal_id,
-
-          destination_address,
-
-          asset,
-
-          network,
-
-          amount,
-
-          status,
-
-          tx_hash,
-
-          order_id,
-
-          created_at,
-
-          updated_at
-
-      `;
-
-
-    const withdrawal =
-      result[0];
-
-
-    /*
-     * =========================
-     * RESPOSTA
-     * =========================
-     */
+    const withdrawal = result[0];
 
     return res.status(201).json({
-
       success: true,
 
       message:
         "Pedido de retirada criado e aguardando autorização.",
 
       withdrawal: {
-
         id:
           withdrawal.id,
 
@@ -482,6 +347,15 @@ export default async function handler(req, res) {
 
         destination_address:
           withdrawal.destination_address,
+
+        amount_requested:
+          withdrawal.amount_requested,
+
+        withdrawal_fee:
+          withdrawal.withdrawal_fee,
+
+        amount_to_send:
+          withdrawal.amount_to_send,
 
         amount:
           withdrawal.amount,
@@ -508,38 +382,26 @@ export default async function handler(req, res) {
           false,
 
         wallet_balance:
-          formatUsdtAmount(
-            walletRawBalance
-          ),
+          formatUsdtAmount(walletRawBalance),
 
         created_at:
           withdrawal.created_at,
 
         updated_at:
           withdrawal.updated_at
-
       }
-
     });
 
-
   } catch (error) {
-
     console.error(
       "USDTMZ WITHDRAWAL ERROR:",
-      error?.message ||
-      error
+      error?.message || error
     );
 
     return res.status(500).json({
-
       success: false,
-
       error:
         "Erro interno ao criar o pedido de retirada."
-
     });
-
   }
-
 }
