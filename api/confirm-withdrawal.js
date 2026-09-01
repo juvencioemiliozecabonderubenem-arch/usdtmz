@@ -1,46 +1,50 @@
-import { neon } from "@neondatabase/serverless";
-import TronWeb from "tronweb";
+// /api/confirm-withdrawal.js
+//
+// USDTMZ — CONFIRM WITHDRAWAL
+// TRON MAINNET / USDT TRC-20
+//
+// FLUXO:
+//
+// PROCESSING
+//     ↓
+// consulta TXID na TRON
+//     ↓
+// verifica confirmação
+//     ↓
+// verifica contrato USDT
+//     ↓
+// verifica destino
+//     ↓
+// verifica valor
+//     ↓
+// COMPLETED
+//
+// IMPORTANTE:
+//
+// - NÃO assina
+// - NÃO transmite
+// - NÃO usa TRON_PRIVATE_KEY
+// - NÃO cria uma nova transação
+// - somente confirma uma transação já transmitida
+//
+// Se a blockchain ainda não confirmou:
+// PROCESSING
+//
+// Se a blockchain indicar falha:
+// FAILED
+//
+// Se todos os dados estiverem corretos:
+// COMPLETED
+//
 
-/*
- * =========================================================
- * USDTMZ — CONFIRM WITHDRAWAL
- * =========================================================
- *
- * POST /api/confirm-withdrawal
- *
- * Recebe:
- *
- * {
- *   "withdrawal_id": "WD-XXXX"
- * }
- *
- * Fluxo:
- *
- * PROCESSING
- *     ↓
- * consultar TX na TRON
- *     ↓
- * TX confirmado
- *     ↓
- * wallet_transactions = COMPLETED
- *     ↓
- * withdrawals = COMPLETED
- *     ↓
- * orders = USDT_SENT
- *
- * Se ainda não estiver confirmado:
- *
- * PROCESSING continua PROCESSING
- *
- * =========================================================
- */
+import { neon } from "@neondatabase/serverless";
 
 const TRON_HOST =
   process.env.TRON_HOST ||
   "https://api.trongrid.io";
 
 const TRONGRID_API_KEY =
-  process.env.TRONGRID_API_KEY;
+  process.env.TRONGRID_API_KEY || "";
 
 const USDT_CONTRACT =
   "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
@@ -51,6 +55,9 @@ const NETWORK =
 const ASSET =
   "USDT";
 
+const USDT_DECIMALS =
+  6;
+
 
 /*
  * =========================================================
@@ -59,7 +66,6 @@ const ASSET =
  */
 
 function json(res, status, data) {
-
   res.setHeader(
     "Content-Type",
     "application/json"
@@ -78,7 +84,6 @@ function json(res, status, data) {
  */
 
 function isValidTronAddress(address) {
-
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
     String(address || "").trim()
   );
@@ -87,26 +92,11 @@ function isValidTronAddress(address) {
 
 /*
  * =========================================================
- * TX HASH
- * =========================================================
- */
-
-function isValidTxHash(hash) {
-
-  return /^[a-fA-F0-9]{64}$/.test(
-    String(hash || "").trim()
-  );
-}
-
-
-/*
- * =========================================================
- * USDT
+ * USDT PARSER
  * =========================================================
  */
 
 function parseUsdtAmount(value) {
-
   const text =
     String(value ?? "").trim();
 
@@ -123,23 +113,29 @@ function parseUsdtAmount(value) {
     text.split(".");
 
   const padded =
-    decimal.padEnd(6, "0");
+    decimal.padEnd(
+      USDT_DECIMALS,
+      "0"
+    );
 
   const raw =
     BigInt(whole) *
       1_000_000n +
     BigInt(padded);
 
-  if (raw <= 0n) {
-    return null;
-  }
-
-  return raw;
+  return raw > 0n
+    ? raw
+    : null;
 }
 
 
-function formatUsdtAmount(raw) {
+/*
+ * =========================================================
+ * FORMAT USDT
+ * =========================================================
+ */
 
+function formatUsdtAmount(raw) {
   const value =
     BigInt(raw);
 
@@ -152,7 +148,10 @@ function formatUsdtAmount(raw) {
       1_000_000n
     )
       .toString()
-      .padStart(6, "0");
+      .padStart(
+        USDT_DECIMALS,
+        "0"
+      );
 
   return `${whole}.${decimal}`;
 }
@@ -160,87 +159,356 @@ function formatUsdtAmount(raw) {
 
 /*
  * =========================================================
- * TRON API
+ * TRON REQUEST
  * =========================================================
  */
 
-async function getTransaction(txHash) {
-
+async function tronRequest(
+  endpoint,
+  options = {}
+) {
   const response =
     await fetch(
-      `${TRON_HOST}/wallet/gettransactionbyid`,
+      `${TRON_HOST}${endpoint}`,
       {
-        method: "POST",
+        ...options,
 
         headers: {
+          Accept:
+            "application/json",
+
           "Content-Type":
             "application/json",
 
-          "TRON-PRO-API-KEY":
-            TRONGRID_API_KEY
-        },
+          ...(TRONGRID_API_KEY
+            ? {
+                "TRON-PRO-API-KEY":
+                  TRONGRID_API_KEY
+              }
+            : {}),
 
-        body:
-          JSON.stringify({
-            value:
-              txHash
-          })
+          ...(options.headers || {})
+        }
       }
     );
 
+  const text =
+    await response.text();
+
+  let data;
+
+  try {
+    data =
+      JSON.parse(text);
+  } catch {
+    data = {
+      raw: text
+    };
+  }
 
   if (!response.ok) {
-
     throw new Error(
-      `TRON API HTTP ${response.status}`
+      `TRONGrid HTTP ${response.status}`
     );
   }
 
-
-  return response.json();
+  return data;
 }
 
 
 /*
  * =========================================================
- * TRON CONFIRMAÇÃO
+ * TRANSACTION INFO
  * =========================================================
  */
 
-async function getTransactionInfo(txHash) {
+async function getTransactionInfo(
+  txHash
+) {
+  return tronRequest(
+    "/wallet/gettransactioninfobyid",
+    {
+      method:
+        "POST",
 
-  const response =
-    await fetch(
-      `${TRON_HOST}/wallet/gettransactioninfobyid`,
-      {
-        method: "POST",
+      body:
+        JSON.stringify({
+          value:
+            txHash
+        })
+    }
+  );
+}
 
-        headers: {
-          "Content-Type":
-            "application/json",
 
-          "TRON-PRO-API-KEY":
-            TRONGRID_API_KEY
-        },
+/*
+ * =========================================================
+ * TRANSACTION
+ * =========================================================
+ */
 
-        body:
-          JSON.stringify({
-            value:
-              txHash
-          })
-      }
+async function getTransaction(
+  txHash
+) {
+  return tronRequest(
+    "/wallet/gettransactionbyid",
+    {
+      method:
+        "POST",
+
+      body:
+        JSON.stringify({
+          value:
+            txHash
+        })
+    }
+  );
+}
+
+
+/*
+ * =========================================================
+ * CONFIRMAÇÃO DO EVENTO TRC-20
+ * =========================================================
+ *
+ * Procura o evento Transfer do contrato USDT.
+ *
+ * Não confiamos somente em "transaction success".
+ *
+ * Também verificamos:
+ *
+ * - contrato
+ * - from
+ * - to
+ * - amount
+ * =========================================================
+ */
+
+async function getTransferEvents(
+  txHash
+) {
+  return tronRequest(
+    `/v1/transactions/${txHash}/events?limit=200`,
+    {
+      method:
+        "GET"
+    }
+  );
+}
+
+
+/*
+ * =========================================================
+ * HEX → TRON ADDRESS
+ * =========================================================
+ */
+
+function hexToTronAddress(
+  hexAddress
+) {
+  let hex =
+    String(
+      hexAddress || ""
+    )
+      .replace(/^0x/, "")
+      .toUpperCase();
+
+  /*
+   * Endereço TRON em logs ABI:
+   *
+   * 20 bytes
+   *
+   * Se vier com 41 no início,
+   * removemos o prefixo.
+   */
+
+  if (
+    hex.startsWith("41") &&
+    hex.length === 42
+  ) {
+    hex =
+      hex.slice(2);
+  }
+
+  if (
+    hex.length !== 40
+  ) {
+    return null;
+  }
+
+  try {
+    return tronHex20ToBase58(
+      hex
+    );
+  } catch {
+    return null;
+  }
+}
+
+
+/*
+ * =========================================================
+ * HEX TRON 20 BYTES → BASE58
+ * =========================================================
+ */
+
+function tronHex20ToBase58(
+  hex20
+) {
+  const fullHex =
+    "41" +
+    hex20;
+
+  const bytes =
+    Buffer.from(
+      fullHex,
+      "hex"
     );
 
+  const payload =
+    Buffer.from(
+      bytes
+    );
 
-  if (!response.ok) {
+  const sha256 =
+    requireCryptoSha256(
+      payload
+    );
 
-    throw new Error(
-      `TRON INFO API HTTP ${response.status}`
+  const checksum =
+    requireCryptoSha256(
+      sha256
+    ).subarray(
+      0,
+      4
+    );
+
+  return base58Encode(
+    Buffer.concat([
+      payload,
+      checksum
+    ])
+  );
+}
+
+
+/*
+ * =========================================================
+ * SHA256
+ * =========================================================
+ */
+
+function requireCryptoSha256(
+  data
+) {
+  /*
+   * Node.js built-in crypto.
+   *
+   * Import dinâmico evitado para manter
+   * o endpoint simples.
+   */
+
+  const crypto =
+    require("node:crypto");
+
+  return crypto
+    .createHash("sha256")
+    .update(data)
+    .digest();
+}
+
+
+/*
+ * =========================================================
+ * BASE58
+ * =========================================================
+ */
+
+function base58Encode(buffer) {
+  const alphabet =
+    "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+  let value =
+    BigInt(
+      "0x" +
+      buffer.toString("hex")
+    );
+
+  let result =
+    "";
+
+  while (
+    value > 0n
+  ) {
+    const remainder =
+      Number(
+        value % 58n
+      );
+
+    result =
+      alphabet[remainder] +
+      result;
+
+    value /=
+      58n;
+  }
+
+  for (
+    let i = 0;
+    i < buffer.length &&
+    buffer[i] === 0;
+    i++
+  ) {
+    result =
+      "1" +
+      result;
+  }
+
+  return result;
+}
+
+
+/*
+ * =========================================================
+ * NORMALIZAR EVENT ADDRESS
+ * =========================================================
+ */
+
+function normalizeEventAddress(
+  value
+) {
+  const text =
+    String(
+      value || ""
+    ).trim();
+
+  if (
+    isValidTronAddress(text)
+  ) {
+    return text;
+  }
+
+  if (
+    /^[0-9a-fA-F]{40}$/.test(
+      text
+    )
+  ) {
+    return hexToTronAddress(
+      text
     );
   }
 
+  if (
+    /^41[0-9a-fA-F]{40}$/.test(
+      text
+    )
+  ) {
+    return hexToTronAddress(
+      text
+    );
+  }
 
-  return response.json();
+  return null;
 }
 
 
@@ -255,14 +523,10 @@ export default async function handler(
   res
 ) {
 
-  /*
-   * -------------------------------------------------------
-   * MÉTODO
-   * -------------------------------------------------------
-   */
-
-  if (req.method !== "POST") {
-
+  if (
+    req.method !==
+    "POST"
+  ) {
     res.setHeader(
       "Allow",
       "POST"
@@ -272,7 +536,9 @@ export default async function handler(
       res,
       405,
       {
-        success: false,
+        success:
+          false,
+
         error:
           "Método não permitido."
       }
@@ -283,20 +549,21 @@ export default async function handler(
   try {
 
     /*
-     * -----------------------------------------------------
+     * =====================================================
      * CONFIGURAÇÃO
-     * -----------------------------------------------------
+     * =====================================================
      */
 
     if (
       !process.env.DATABASE_URL
     ) {
-
       return json(
         res,
         500,
         {
-          success: false,
+          success:
+            false,
+
           error:
             "DATABASE_URL não configurada."
         }
@@ -307,24 +574,19 @@ export default async function handler(
     if (
       !TRONGRID_API_KEY
     ) {
-
       return json(
         res,
         500,
         {
-          success: false,
+          success:
+            false,
+
           error:
             "TRONGRID_API_KEY não configurada."
         }
       );
     }
 
-
-    /*
-     * -----------------------------------------------------
-     * DATABASE
-     * -----------------------------------------------------
-     */
 
     const sql =
       neon(
@@ -333,14 +595,13 @@ export default async function handler(
 
 
     /*
-     * -----------------------------------------------------
+     * =====================================================
      * BODY
-     * -----------------------------------------------------
+     * =====================================================
      */
 
     const body =
       req.body || {};
-
 
     const withdrawalId =
       String(
@@ -349,13 +610,16 @@ export default async function handler(
       ).trim();
 
 
-    if (!withdrawalId) {
-
+    if (
+      !withdrawalId
+    ) {
       return json(
         res,
         400,
         {
-          success: false,
+          success:
+            false,
+
           error:
             "withdrawal_id é obrigatório."
         }
@@ -364,26 +628,42 @@ export default async function handler(
 
 
     /*
-     * -----------------------------------------------------
-     * LOCALIZAR RETIRADA
-     * -----------------------------------------------------
+     * =====================================================
+     * BUSCAR RETIRADA
+     * =====================================================
      */
 
-    const withdrawals =
+    const rows =
       await sql`
 
         SELECT
 
           id,
+
           withdrawal_id,
+
           destination_address,
+
           asset,
+
           network,
+
           amount,
+
+          amount_requested,
+
+          withdrawal_fee,
+
+          amount_to_send,
+
           status,
+
           tx_hash,
+
           order_id,
+
           created_at,
+
           updated_at
 
         FROM withdrawals
@@ -397,14 +677,16 @@ export default async function handler(
 
 
     if (
-      withdrawals.length === 0
+      rows.length ===
+      0
     ) {
-
       return json(
         res,
         404,
         {
-          success: false,
+          success:
+            false,
+
           error:
             "Retirada não encontrada."
         }
@@ -413,32 +695,37 @@ export default async function handler(
 
 
     const withdrawal =
-      withdrawals[0];
+      rows[0];
+
+
+    const status =
+      String(
+        withdrawal.status ||
+        ""
+      ).toUpperCase();
 
 
     /*
-     * -----------------------------------------------------
+     * =====================================================
      * JÁ COMPLETADA
-     * -----------------------------------------------------
+     * =====================================================
      */
 
     if (
-      String(
-        withdrawal.status
-      ).toUpperCase() ===
+      status ===
       "COMPLETED"
     ) {
-
       return json(
         res,
         200,
         {
-          success: true,
-          confirmed: true,
-          already_completed: true,
+          success:
+            true,
+
+          already_completed:
+            true,
 
           withdrawal: {
-
             withdrawal_id:
               withdrawal.withdrawal_id,
 
@@ -447,7 +734,6 @@ export default async function handler(
 
             tx_hash:
               withdrawal.tx_hash
-
           }
         }
       );
@@ -455,38 +741,44 @@ export default async function handler(
 
 
     /*
-     * -----------------------------------------------------
-     * PRECISA ESTAR PROCESSING
-     * -----------------------------------------------------
+     * =====================================================
+     * SÓ PROCESSING PODE SER CONFIRMADA
+     * =====================================================
      */
 
     if (
-      String(
-        withdrawal.status
-      ).toUpperCase() !==
+      status !==
       "PROCESSING"
     ) {
-
       return json(
         res,
         409,
         {
-          success: false,
-          confirmed: false,
+          success:
+            false,
+
           error:
             "A retirada precisa estar PROCESSING para ser confirmada.",
 
-          status:
-            withdrawal.status
+          withdrawal: {
+            withdrawal_id:
+              withdrawal.withdrawal_id,
+
+            status:
+              withdrawal.status,
+
+            tx_hash:
+              withdrawal.tx_hash
+          }
         }
       );
     }
 
 
     /*
-     * -----------------------------------------------------
+     * =====================================================
      * TX HASH
-     * -----------------------------------------------------
+     * =====================================================
      */
 
     const txHash =
@@ -497,26 +789,28 @@ export default async function handler(
 
 
     if (
-      !isValidTxHash(txHash)
+      !/^[a-fA-F0-9]{64}$/.test(
+        txHash
+      )
     ) {
-
       return json(
         res,
-        409,
+        400,
         {
-          success: false,
-          confirmed: false,
+          success:
+            false,
+
           error:
-            "A retirada ainda não possui um TX hash válido."
+            "TX hash inválido ou ainda não registrado."
         }
       );
     }
 
 
     /*
-     * -----------------------------------------------------
+     * =====================================================
      * VALIDAR DESTINO
-     * -----------------------------------------------------
+     * =====================================================
      */
 
     const destination =
@@ -531,12 +825,13 @@ export default async function handler(
         destination
       )
     ) {
-
       return json(
         res,
         400,
         {
-          success: false,
+          success:
+            false,
+
           error:
             "Endereço de destino inválido."
         }
@@ -545,142 +840,94 @@ export default async function handler(
 
 
     /*
-     * -----------------------------------------------------
+     * =====================================================
      * VALIDAR ASSET
-     * -----------------------------------------------------
+     * =====================================================
      */
 
     if (
       String(
-        withdrawal.asset
+        withdrawal.asset ||
+        ""
       ).toUpperCase() !==
       ASSET
     ) {
-
       return json(
         res,
         400,
         {
-          success: false,
+          success:
+            false,
+
           error:
-            "Asset inválido."
+            "Asset inválido. Esperado USDT."
         }
       );
     }
 
 
     /*
-     * -----------------------------------------------------
+     * =====================================================
      * VALIDAR NETWORK
-     * -----------------------------------------------------
+     * =====================================================
      */
 
     if (
       String(
-        withdrawal.network
+        withdrawal.network ||
+        ""
       ) !==
       NETWORK
     ) {
-
       return json(
         res,
         400,
         {
-          success: false,
+          success:
+            false,
+
           error:
-            "Rede inválida."
+            "Network inválida. Esperado TRON Mainnet."
         }
       );
     }
 
 
     /*
-     * -----------------------------------------------------
-     * VALOR
-     * -----------------------------------------------------
+     * =====================================================
+     * VALOR ESPERADO
+     * =====================================================
      */
 
-    const rawAmount =
+    const expectedAmount =
       parseUsdtAmount(
+        withdrawal.amount_to_send ??
         withdrawal.amount
       );
 
 
     if (
-      rawAmount === null
+      expectedAmount ===
+      null
     ) {
-
       return json(
         res,
         400,
         {
-          success: false,
+          success:
+            false,
+
           error:
-            "Valor USDT inválido."
-        }
-      );
-    }
-
-
-    const amountFormatted =
-      formatUsdtAmount(
-        rawAmount
-      );
-
-
-    /*
-     * -----------------------------------------------------
-     * CONSULTAR TRON
-     * -----------------------------------------------------
-     */
-
-    const transaction =
-      await getTransaction(
-        txHash
-      );
-
-
-    /*
-     * TX ainda não encontrada
-     * -----------------------------------------------------
-     */
-
-    if (
-      !transaction ||
-      !transaction.txID
-    ) {
-
-      return json(
-        res,
-        200,
-        {
-          success: true,
-          confirmed: false,
-
-          message:
-            "Transação ainda não encontrada na TRON.",
-
-          withdrawal: {
-
-            withdrawal_id:
-              withdrawal.withdrawal_id,
-
-            status:
-              withdrawal.status,
-
-            tx_hash:
-              txHash
-
-          }
+            "Valor da retirada inválido."
         }
       );
     }
 
 
     /*
-     * -----------------------------------------------------
-     * CONSULTAR RESULTADO
-     * -----------------------------------------------------
+     * =====================================================
+     * TRANSACTION INFO
+     * =====================================================
      */
 
     const transactionInfo =
@@ -690,26 +937,85 @@ export default async function handler(
 
 
     /*
-     * -----------------------------------------------------
-     * VERIFICAR RESULTADO TRON
-     * -----------------------------------------------------
+     * =====================================================
+     * TRANSACTION NÃO ENCONTRADA
+     * =====================================================
      */
 
-    const result =
+    const hasBlock =
+      transactionInfo &&
+      (
+        transactionInfo.blockNumber !==
+          undefined ||
+        transactionInfo.blockNumber !==
+          null
+      );
+
+
+    /*
+     * Se não existe resultado relevante,
+     * ainda pode estar a aguardar indexação.
+     */
+
+    if (
+      !transactionInfo ||
+      Object.keys(
+        transactionInfo
+      ).length === 0
+    ) {
+      return json(
+        res,
+        200,
+        {
+          success:
+            true,
+
+          confirmed:
+            false,
+
+          status:
+            "PROCESSING",
+
+          message:
+            "A transação ainda não foi encontrada como confirmada na TRON.",
+
+          withdrawal_id:
+            withdrawalId,
+
+          tx_hash:
+            txHash
+        }
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * VERIFICAR RESULTADO DA EXECUÇÃO
+     * =====================================================
+     */
+
+    const receiptResult =
       String(
         transactionInfo?.receipt?.result ||
+        transactionInfo?.result ||
         ""
       ).toUpperCase();
 
 
-    /*
-     * FALHA
-     * -----------------------------------------------------
-     */
+    const failed =
+      [
+        "FAILED",
+        "OUT_OF_ENERGY",
+        "REVERT",
+        "OUT_OF_TIME"
+      ].includes(
+        receiptResult
+      );
+
 
     if (
-      result &&
-      result !== "SUCCESS"
+      failed
     ) {
 
       await sql`
@@ -730,9 +1036,6 @@ export default async function handler(
           AND status =
             'PROCESSING'
 
-          AND tx_hash =
-            ${txHash}
-
       `;
 
 
@@ -740,54 +1043,68 @@ export default async function handler(
         res,
         200,
         {
-          success: false,
-          confirmed: false,
+          success:
+            false,
+
+          confirmed:
+            false,
 
           status:
             "FAILED",
 
+          error:
+            "A transação foi executada com falha na TRON.",
+
+          withdrawal_id:
+            withdrawalId,
+
           tx_hash:
             txHash,
 
-          error:
-            "A transação TRON foi confirmada como falhada."
+          tron_result:
+            receiptResult
         }
       );
     }
 
 
     /*
-     * -----------------------------------------------------
-     * AINDA SEM RECEIPT FINAL
-     * -----------------------------------------------------
+     * =====================================================
+     * TRANSAÇÃO BASE
+     * =====================================================
      */
 
-    if (
-      !result
-    ) {
+    const transaction =
+      await getTransaction(
+        txHash
+      );
 
+
+    if (
+      !transaction ||
+      !transaction.txID
+    ) {
       return json(
         res,
         200,
         {
-          success: true,
-          confirmed: false,
+          success:
+            true,
+
+          confirmed:
+            false,
+
+          status:
+            "PROCESSING",
 
           message:
-            "A transação existe, mas ainda aguarda confirmação.",
+            "TXID encontrado parcialmente. Aguardando dados completos da transação.",
 
-          withdrawal: {
+          withdrawal_id:
+            withdrawalId,
 
-            withdrawal_id:
-              withdrawal.withdrawal_id,
-
-            status:
-              withdrawal.status,
-
-            tx_hash:
-              txHash
-
-          }
+          tx_hash:
+            txHash
         }
       );
     }
@@ -795,154 +1112,388 @@ export default async function handler(
 
     /*
      * =====================================================
-     * TRANSAÇÃO CONFIRMADA
+     * CONTRACT
      * =====================================================
      */
 
-
-    /*
-     * -----------------------------------------------------
-     * LOCALIZAR WALLET
-     * -----------------------------------------------------
-     */
-
-    const wallets =
-      await sql`
-
-        SELECT
-
-          id,
-          wallet_address,
-          network,
-          asset,
-          status
-
-        FROM wallets
-
-        WHERE network =
-          ${NETWORK}
-
-          AND asset =
-          ${ASSET}
-
-          AND status =
-          'mainnet'
-
-        ORDER BY id DESC
-
-        LIMIT 1
-
-      `;
+    const contracts =
+      transaction
+        ?.raw_data
+        ?.contract;
 
 
     if (
-      wallets.length === 0
+      !Array.isArray(
+        contracts
+      ) ||
+      contracts.length ===
+        0
+    ) {
+      return json(
+        res,
+        200,
+        {
+          success:
+            true,
+
+          confirmed:
+            false,
+
+          status:
+            "PROCESSING",
+
+          message:
+            "Aguardando detalhes do contrato da transação.",
+
+          withdrawal_id:
+            withdrawalId,
+
+          tx_hash:
+            txHash
+        }
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * TRANSFER EVENTS
+     * =====================================================
+     */
+
+    const eventsResponse =
+      await getTransferEvents(
+        txHash
+      );
+
+
+    const events =
+      Array.isArray(
+        eventsResponse?.data
+      )
+        ? eventsResponse.data
+        : [];
+
+
+    /*
+     * =====================================================
+     * LOCALIZAR TRANSFER USDT
+     * =====================================================
+     */
+
+    const transferEvent =
+      events.find(
+        event => {
+
+          const contract =
+            String(
+              event?.contract_address ||
+              event?.address ||
+              ""
+            ).toLowerCase();
+
+
+          const eventName =
+            String(
+              event?.event_name ||
+              event?.name ||
+              ""
+            ).toLowerCase();
+
+
+          return (
+            contract ===
+              USDT_CONTRACT.toLowerCase() &&
+
+            eventName ===
+              "transfer"
+          );
+
+        }
+      );
+
+
+    /*
+     * =====================================================
+     * AINDA NÃO HÁ EVENTO
+     * =====================================================
+     */
+
+    if (
+      !transferEvent
+    ) {
+      return json(
+        res,
+        200,
+        {
+          success:
+            true,
+
+          confirmed:
+            false,
+
+          status:
+            "PROCESSING",
+
+          message:
+            "A transação existe, mas o evento USDT Transfer ainda não foi localizado.",
+
+          withdrawal_id:
+            withdrawalId,
+
+          tx_hash:
+            txHash
+        }
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * EVENT DATA
+     * =====================================================
+     */
+
+    const eventResult =
+      transferEvent?.result ||
+      transferEvent?.event_data ||
+      {};
+
+
+    const eventFrom =
+      normalizeEventAddress(
+        eventResult.from ||
+        eventResult._from ||
+        transferEvent.from
+      );
+
+
+    const eventTo =
+      normalizeEventAddress(
+        eventResult.to ||
+        eventResult._to ||
+        transferEvent.to
+      );
+
+
+    const eventValue =
+      String(
+        eventResult.value ||
+        eventResult._value ||
+        transferEvent.value ||
+        "0"
+      );
+
+
+    let transferredRaw;
+
+    try {
+
+      transferredRaw =
+        BigInt(
+          eventValue
+        );
+
+    } catch {
+
+      return json(
+        res,
+        502,
+        {
+          success:
+            false,
+
+          error:
+            "O valor do evento USDT retornado pela TRON é inválido."
+        }
+      );
+
+    }
+
+
+    /*
+     * =====================================================
+     * OBTER SENDER DA TRANSAÇÃO
+     * =====================================================
+     */
+
+    let sender =
+      null;
+
+
+    try {
+
+      const parameter =
+        transaction
+          ?.raw_data
+          ?.contract?.[0]
+          ?.parameter
+          ?.value;
+
+
+      if (
+        parameter?.owner_address
+      ) {
+
+        sender =
+          normalizeEventAddress(
+            parameter.owner_address
+          );
+
+      }
+
+    } catch {
+      sender = null;
+    }
+
+
+    /*
+     * =====================================================
+     * VERIFICAÇÃO DO CONTRATO
+     * =====================================================
+     */
+
+    const eventContract =
+      String(
+        transferEvent?.contract_address ||
+        transferEvent?.address ||
+        ""
+      ).toLowerCase();
+
+
+    if (
+      eventContract !==
+      USDT_CONTRACT.toLowerCase()
+    ) {
+      return json(
+        res,
+        400,
+        {
+          success:
+            false,
+
+          error:
+            "O evento confirmado não pertence ao contrato USDT esperado.",
+
+          tx_hash:
+            txHash
+        }
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * VERIFICAR DESTINO
+     * =====================================================
+     */
+
+    if (
+      eventTo !==
+      destination
     ) {
 
       return json(
         res,
-        500,
+        400,
         {
-          success: false,
+          success:
+            false,
+
           error:
-            "Carteira USDT Mainnet não encontrada."
+            "O destino confirmado na blockchain não corresponde ao destino da retirada.",
+
+          expected:
+            destination,
+
+          blockchain:
+            eventTo,
+
+          tx_hash:
+            txHash
         }
       );
     }
 
 
-    const wallet =
-      wallets[0];
-
-
     /*
-     * -----------------------------------------------------
-     * WALLET TRANSACTION — IDEMPOTÊNCIA
-     * -----------------------------------------------------
-     */
-
-    const existingTransaction =
-      await sql`
-
-        SELECT
-
-          id,
-          wallet_id,
-          order_id,
-          tx_hash,
-          type,
-          asset,
-          amount,
-          network,
-          status,
-          created_at
-
-        FROM wallet_transactions
-
-        WHERE tx_hash =
-          ${txHash}
-
-        LIMIT 1
-
-      `;
-
-
-    /*
-     * -----------------------------------------------------
-     * CRIAR WALLET TRANSACTION
-     * -----------------------------------------------------
+     * =====================================================
+     * VERIFICAR VALOR
+     * =====================================================
      */
 
     if (
-      existingTransaction.length === 0
+      transferredRaw !==
+      expectedAmount
     ) {
 
-      await sql`
+      return json(
+        res,
+        400,
+        {
+          success:
+            false,
 
-        INSERT INTO wallet_transactions (
+          error:
+            "O valor USDT confirmado na blockchain não corresponde ao valor da retirada.",
 
-          wallet_id,
-          order_id,
-          tx_hash,
-          type,
-          asset,
-          amount,
-          network,
-          status,
-          created_at
+          expected:
+            formatUsdtAmount(
+              expectedAmount
+            ),
 
-        )
+          blockchain:
+            formatUsdtAmount(
+              transferredRaw
+            ),
 
-        VALUES (
-
-          ${wallet.id},
-
-          ${withdrawal.order_id},
-
-          ${txHash},
-
-          'WITHDRAWAL',
-
-          ${ASSET},
-
-          ${amountFormatted},
-
-          ${NETWORK},
-
-          'COMPLETED',
-
-          NOW()
-
-        )
-
-      `;
+          tx_hash:
+            txHash
+        }
+      );
     }
 
 
     /*
-     * -----------------------------------------------------
-     * WITHDRAWAL → COMPLETED
-     * -----------------------------------------------------
+     * =====================================================
+     * TXID CONSISTENTE
+     * =====================================================
+     */
+
+    if (
+      String(
+        transaction.txID
+      ).toLowerCase() !==
+      txHash.toLowerCase()
+    ) {
+      return json(
+        res,
+        400,
+        {
+          success:
+            false,
+
+          error:
+            "O TXID retornado pela TRON não corresponde ao TXID armazenado.",
+
+          tx_hash:
+            txHash
+        }
+      );
+    }
+
+
+    /*
+     * =====================================================
+     * CONFIRMAR COMPLETED
+     * =====================================================
+     *
+     * Só mudamos:
+     *
+     * PROCESSING → COMPLETED
+     *
+     * se ainda não tiver sido concluída.
+     * =====================================================
      */
 
     const completed =
@@ -967,114 +1518,181 @@ export default async function handler(
           AND status =
             'PROCESSING'
 
+          AND tx_hash =
+            ${txHash}
+
         RETURNING
 
-          id,
           withdrawal_id,
-          destination_address,
-          asset,
-          network,
-          amount,
+
           status,
+
           tx_hash,
-          order_id,
-          created_at,
+
+          destination_address,
+
+          amount_requested,
+
+          withdrawal_fee,
+
+          amount_to_send,
+
           updated_at
 
       `;
 
 
     /*
-     * -----------------------------------------------------
-     * ORDER → USDT_SENT
-     * -----------------------------------------------------
- */
+     * =====================================================
+     * OUTRA EXECUÇÃO JÁ CONFIRMOU
+     * =====================================================
+     */
 
     if (
-      withdrawal.order_id
+      completed.length ===
+      0
     ) {
 
-      await sql`
+      const current =
+        await sql`
 
-        UPDATE orders
+          SELECT
 
-        SET
+            withdrawal_id,
 
-          blockchain_tx_hash =
-            ${txHash},
+            status,
 
-          status =
-            CASE
+            tx_hash,
 
-              WHEN status =
-                'COMPLETED'
+            updated_at
 
-              THEN status
+          FROM withdrawals
 
-              ELSE 'USDT_SENT'
+          WHERE withdrawal_id =
+            ${withdrawalId}
 
-            END,
+          LIMIT 1
 
-          updated_at =
-            NOW()
+        `;
 
-        WHERE order_id =
-          ${withdrawal.order_id}
 
-      `;
+      if (
+        current.length >
+          0 &&
+        String(
+          current[0].status ||
+          ""
+        ).toUpperCase() ===
+          "COMPLETED"
+      ) {
+
+        return json(
+          res,
+          200,
+          {
+            success:
+              true,
+
+            confirmed:
+              true,
+
+            already_completed:
+              true,
+
+            withdrawal:
+              current[0]
+          }
+        );
+
+      }
+
+
+      return json(
+        res,
+        409,
+        {
+          success:
+            false,
+
+          error:
+            "A retirada mudou de estado antes da confirmação."
+        }
+      );
     }
 
 
     /*
-     * -----------------------------------------------------
-     * RESPOSTA
-     * -----------------------------------------------------
- */
-
-    const finalWithdrawal =
-      completed.length > 0
-        ? completed[0]
-        : withdrawal;
-
+     * =====================================================
+     * SUCESSO FINAL
+     * =====================================================
+     */
 
     return json(
       res,
       200,
       {
-        success: true,
 
-        confirmed: true,
+        success:
+          true,
+
+        confirmed:
+          true,
+
+        status:
+          "COMPLETED",
+
+        withdrawal_id:
+          withdrawalId,
+
+        tx_hash:
+          txHash,
+
+        destination:
+          destination,
+
+        asset:
+          ASSET,
+
+        network:
+          NETWORK,
+
+        standard:
+          "TRC-20",
+
+        contract:
+          USDT_CONTRACT,
+
+        amount:
+          formatUsdtAmount(
+            transferredRaw
+          ),
+
+        sender,
+
+        verification: {
+
+          transaction_found:
+            true,
+
+          transaction_id_matches:
+            true,
+
+          usdt_contract_matches:
+            true,
+
+          destination_matches:
+            true,
+
+          amount_matches:
+            true,
+
+          on_chain:
+            true
+
+        },
 
         message:
-          "Transação TRON confirmada com sucesso.",
-
-        withdrawal: {
-
-          withdrawal_id:
-            finalWithdrawal.withdrawal_id,
-
-          destination_address:
-            finalWithdrawal.destination_address,
-
-          amount:
-            finalWithdrawal.amount,
-
-          asset:
-            finalWithdrawal.asset,
-
-          network:
-            finalWithdrawal.network,
-
-          status:
-            finalWithdrawal.status,
-
-          tx_hash:
-            finalWithdrawal.tx_hash,
-
-          order_id:
-            finalWithdrawal.order_id
-
-        }
+          "Retirada confirmada na TRON Mainnet e marcada como COMPLETED."
 
       }
     );
@@ -1093,11 +1711,25 @@ export default async function handler(
       res,
       500,
       {
-        success: false,
-        confirmed: false,
+
+        success:
+          false,
+
         error:
-          "Erro interno ao confirmar retirada."
+          "Erro interno ao confirmar a retirada.",
+
+        details:
+          process.env.NODE_ENV ===
+          "development"
+            ? (
+                error?.message ||
+                String(error)
+              )
+            : undefined
+
       }
     );
+
   }
+
 }
