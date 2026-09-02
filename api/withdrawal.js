@@ -9,8 +9,14 @@ const USDT_DECIMALS = 6;
 // =========================================================
 
 function json(res, status, data) {
-  res.setHeader("Content-Type", "application/json");
-  return res.status(status).json(data);
+  res.setHeader(
+    "Content-Type",
+    "application/json"
+  );
+
+  return res
+    .status(status)
+    .json(data);
 }
 
 // =========================================================
@@ -24,32 +30,37 @@ function isValidTronAddress(address) {
 }
 
 // =========================================================
-// USDT AMOUNT
+// USDT AMOUNT → BIGINT
 // =========================================================
 
 function parseUsdtAmount(value) {
-  const text = String(value ?? "").trim();
+  const text =
+    String(value ?? "").trim();
 
   if (!/^\d+(\.\d{1,6})?$/.test(text)) {
     return null;
   }
 
-  const [whole, decimal = ""] = text.split(".");
+  const [whole, decimal = ""] =
+    text.split(".");
 
-  const padded = decimal.padEnd(
-    USDT_DECIMALS,
-    "0"
-  );
+  const padded =
+    decimal
+      .padEnd(USDT_DECIMALS, "0");
 
-  const raw =
-    BigInt(whole) * 1_000_000n +
-    BigInt(padded);
+  try {
+    const raw =
+      BigInt(whole) * 1_000_000n +
+      BigInt(padded);
 
-  if (raw <= 0n) {
+    if (raw <= 0n) {
+      return null;
+    }
+
+    return raw;
+  } catch {
     return null;
   }
-
-  return raw;
 }
 
 // =========================================================
@@ -57,17 +68,22 @@ function parseUsdtAmount(value) {
 // =========================================================
 
 function formatUsdtAmount(raw) {
-  const value = BigInt(raw);
+  try {
+    const value =
+      BigInt(raw);
 
-  const whole =
-    value / 1_000_000n;
+    const whole =
+      value / 1_000_000n;
 
-  const decimal =
-    (value % 1_000_000n)
-      .toString()
-      .padStart(6, "0");
+    const decimal =
+      (value % 1_000_000n)
+        .toString()
+        .padStart(6, "0");
 
-  return `${whole}.${decimal}`;
+    return `${whole}.${decimal}`;
+  } catch {
+    return "0.000000";
+  }
 }
 
 // =========================================================
@@ -94,13 +110,20 @@ function getBody(req) {
 // HANDLER
 // =========================================================
 
-export default async function handler(req, res) {
+export default async function handler(
+  req,
+  res
+) {
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
+    res.setHeader(
+      "Allow",
+      "POST"
+    );
 
     return json(res, 405, {
       success: false,
-      error: "Método não permitido."
+      error:
+        "Método não permitido."
     });
   }
 
@@ -112,28 +135,35 @@ export default async function handler(req, res) {
     if (!process.env.DATABASE_URL) {
       return json(res, 500, {
         success: false,
-        error: "DATABASE_URL não configurada."
+        error:
+          "DATABASE_URL não configurada."
       });
     }
 
-    const sql = neon(process.env.DATABASE_URL);
+    const sql =
+      neon(
+        process.env.DATABASE_URL
+      );
 
     // =======================================================
     // BODY
     // =======================================================
 
-    const body = getBody(req);
+    const body =
+      getBody(req);
 
-    const userId = String(
-      body.user_id || ""
-    ).trim();
+    const userId =
+      String(
+        body.user_id || ""
+      ).trim();
 
-    const destinationAddress = String(
-      body.destination_address ||
-      body.address ||
-      body.destination ||
-      ""
-    ).trim();
+    const destinationAddress =
+      String(
+        body.destination_address ||
+        body.address ||
+        body.destination ||
+        ""
+      ).trim();
 
     const amountInput =
       body.amount_to_send ??
@@ -145,87 +175,106 @@ export default async function handler(req, res) {
       ).trim();
 
     // =======================================================
-    // VALIDAR USER
+    // USER
     // =======================================================
 
     if (!userId) {
       return json(res, 400, {
         success: false,
-        error: "user_id é obrigatório."
+        error:
+          "user_id é obrigatório."
       });
     }
 
     // =======================================================
-    // VALIDAR DESTINO
+    // DESTINO
     // =======================================================
 
-    if (!isValidTronAddress(destinationAddress)) {
+    if (
+      !isValidTronAddress(
+        destinationAddress
+      )
+    ) {
       return json(res, 400, {
         success: false,
-        error: "Endereço TRON inválido."
+        error:
+          "Endereço TRON inválido."
       });
     }
 
     // =======================================================
-    // VALIDAR VALOR
+    // VALOR
     // =======================================================
 
     const amountRaw =
-      parseUsdtAmount(amountInput);
+      parseUsdtAmount(
+        amountInput
+      );
 
     if (amountRaw === null) {
       return json(res, 400, {
         success: false,
-        error: "Valor USDT inválido."
+        error:
+          "Valor USDT inválido. Use até 6 casas decimais."
       });
     }
 
     const amount =
-      formatUsdtAmount(amountRaw);
+      formatUsdtAmount(
+        amountRaw
+      );
 
     // =======================================================
     // IDEMPOTÊNCIA
     // =======================================================
-    //
-    // Se o frontend reenviar um withdrawal_id já criado,
-    // devolvemos a retirada existente sem debitar novamente.
-    //
-    // =======================================================
 
     if (requestedWithdrawalId) {
-      const existing = await sql`
-        SELECT
-          withdrawal_id,
-          user_id,
-          destination_address,
-          amount_to_send,
-          asset,
-          network,
-          status,
-          tx_hash,
-          created_at,
-          updated_at
-        FROM withdrawals
-        WHERE
-          withdrawal_id = ${requestedWithdrawalId}
-          AND user_id = ${userId}
-        LIMIT 1
-      `;
+      const existing =
+        await sql`
+
+          SELECT
+            withdrawal_id,
+            user_id,
+            destination_address,
+            amount_to_send,
+            asset,
+            network,
+            status,
+            tx_hash,
+            created_at,
+            updated_at
+
+          FROM withdrawals
+
+          WHERE
+            withdrawal_id =
+              ${requestedWithdrawalId}
+
+            AND
+            user_id =
+              ${userId}
+
+          LIMIT 1
+
+        `;
 
       if (existing.length === 0) {
         return json(res, 404, {
           success: false,
-          error: "Retirada não encontrada."
+          error:
+            "Retirada não encontrada."
         });
       }
 
-      const withdrawal = existing[0];
+      const withdrawal =
+        existing[0];
 
       return json(res, 200, {
         success: true,
         created: false,
         idempotent: true,
         automatic: false,
+
         next_step:
           "/api/process-withdrawal",
 
@@ -255,108 +304,119 @@ export default async function handler(req, res) {
             withdrawal.status,
 
           tx_hash:
-            withdrawal.tx_hash || null
+            withdrawal.tx_hash ||
+            null
         }
       });
     }
 
     // =======================================================
-    // DÉBITO + CRIAÇÃO DA RETIRADA
+    // DÉBITO + CRIAÇÃO
     // =======================================================
     //
-    // Esta operação é feita numa única instrução SQL.
+    // IMPORTANTE:
+    // A tabela utilizada aqui é "balances",
+    // igual ao saldo.js.
     //
-    // O saldo somente é debitado se:
-    //
-    // 1. o utilizador existir;
-    // 2. houver saldo suficiente;
-    // 3. o UPDATE conseguir reservar o valor.
-    //
-    // Depois disso a retirada é criada como AUTHORIZED.
-    //
-    // Como UPDATE + INSERT fazem parte da mesma instrução,
-    // não existe o intervalo perigoso:
-    //
-    // SELECT saldo
-    //      ↓
-    // outra retirada usa o saldo
-    //      ↓
-    // INSERT
-    //
+    // O débito e a criação da retirada
+    // acontecem na mesma operação SQL.
     // =======================================================
 
-    const result = await sql`
-      WITH debited AS (
-        UPDATE balance
-        SET
-          usdt_balance =
-            usdt_balance - ${amount},
+    const result =
+      await sql`
 
-          updated_at =
-            NOW()
+        WITH debited AS (
 
-        WHERE
-          user_id = ${userId}
+          UPDATE balances
 
-          AND
-          usdt_balance >= ${amount}
+          SET
+
+            usdt_balance =
+              usdt_balance - ${amount},
+
+            updated_at =
+              NOW()
+
+          WHERE
+            user_id =
+              ${userId}
+
+            AND
+            usdt_balance >=
+              ${amount}
+
+          RETURNING
+            user_id,
+            usdt_balance
+
+        )
+
+        INSERT INTO withdrawals (
+
+          user_id,
+          destination_address,
+          amount_to_send,
+          asset,
+          network,
+          status,
+          tx_hash,
+          created_at,
+          updated_at
+
+        )
+
+        SELECT
+
+          user_id,
+          ${destinationAddress},
+          ${amount},
+          ${ASSET},
+          ${NETWORK},
+
+          'AUTHORIZED',
+
+          NULL,
+
+          NOW(),
+          NOW()
+
+        FROM debited
 
         RETURNING
+
+          withdrawal_id,
           user_id,
-          usdt_balance
-      )
-
-      INSERT INTO withdrawals (
-        user_id,
-        destination_address,
-        amount_to_send,
-        asset,
-        network,
-        status,
-        tx_hash,
-        created_at,
-        updated_at
-      )
-
-      SELECT
-        user_id,
-        ${destinationAddress},
-        ${amount},
-        ${ASSET},
-        ${NETWORK},
-        'AUTHORIZED',
-        NULL,
-        NOW(),
-        NOW()
-
-      FROM debited
-
-      RETURNING
-        withdrawal_id,
-        user_id,
-        destination_address,
-        amount_to_send,
-        asset,
-        network,
-        status,
-        tx_hash,
-        created_at,
-        updated_at
-    `;
+          destination_address,
+          amount_to_send,
+          asset,
+          network,
+          status,
+          tx_hash,
+          created_at,
+          updated_at
+      `;
 
     // =======================================================
-    // SALDO INSUFICIENTE / USER NÃO ENCONTRADO
+    // SALDO INSUFICIENTE / UTILIZADOR NÃO ENCONTRADO
     // =======================================================
 
     if (result.length === 0) {
-      const balances = await sql`
-        SELECT
-          user_id,
-          usdt_balance
-        FROM balance
-        WHERE user_id = ${userId}
-        LIMIT 1
-      `;
+
+      const balances =
+        await sql`
+
+          SELECT
+            user_id,
+            usdt_balance
+
+          FROM balances
+
+          WHERE user_id =
+            ${userId}
+
+          LIMIT 1
+
+        `;
 
       if (balances.length === 0) {
         return json(res, 404, {
@@ -374,10 +434,13 @@ export default async function handler(req, res) {
       const currentBalance =
         currentRaw === null
           ? "0.000000"
-          : formatUsdtAmount(currentRaw);
+          : formatUsdtAmount(
+              currentRaw
+            );
 
       return json(res, 400, {
         success: false,
+
         error:
           "Saldo USDT insuficiente.",
 
@@ -393,33 +456,45 @@ export default async function handler(req, res) {
     // RETIRADA CRIADA
     // =======================================================
 
-    const withdrawal = result[0];
+    const withdrawal =
+      result[0];
 
     // =======================================================
     // SALDO APÓS DÉBITO
     // =======================================================
 
-    const balanceAfterRaw =
+    const balanceResult =
       await sql`
+
         SELECT
           usdt_balance
-        FROM balance
-        WHERE user_id = ${userId}
+
+        FROM balances
+
+        WHERE user_id =
+          ${userId}
+
         LIMIT 1
+
       `;
 
     let balanceAfter =
-      null;
+      "0.000000";
 
-    if (balanceAfterRaw.length > 0) {
+    if (
+      balanceResult.length > 0
+    ) {
       const parsed =
         parseUsdtAmount(
-          balanceAfterRaw[0].usdt_balance
+          balanceResult[0]
+            .usdt_balance
         );
 
       if (parsed !== null) {
         balanceAfter =
-          formatUsdtAmount(parsed);
+          formatUsdtAmount(
+            parsed
+          );
       }
     }
 
@@ -427,7 +502,8 @@ export default async function handler(req, res) {
     // RESPOSTA
     // =======================================================
 
-    return json(res, 200, {
+    return json(res, 201, {
+
       success: true,
 
       created: true,
@@ -438,6 +514,7 @@ export default async function handler(req, res) {
         "/api/process-withdrawal",
 
       withdrawal: {
+
         withdrawal_id:
           withdrawal.withdrawal_id,
 
@@ -463,10 +540,12 @@ export default async function handler(req, res) {
           withdrawal.status,
 
         tx_hash:
-          withdrawal.tx_hash || null
+          withdrawal.tx_hash ||
+          null
       },
 
       balance: {
+
         available:
           balanceAfter,
 
@@ -479,19 +558,23 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
+
     console.error(
       "USDTMZ WITHDRAWAL ERROR:",
-      error?.message || error
+      error?.message ||
+      error
     );
 
     return json(res, 500, {
+
       success: false,
 
       error:
         "Erro interno ao criar a retirada.",
 
       details:
-        process.env.NODE_ENV === "development"
+        process.env.NODE_ENV ===
+        "development"
           ? (
               error?.message ||
               String(error)
