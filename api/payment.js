@@ -4,9 +4,9 @@
 // POST /api/payment
 //
 // IMPORTANTE:
-// - As chaves ficam somente nas Environment Variables da Vercel.
+// - As credenciais ficam somente nas Environment Variables da Vercel.
 // - Este endpoint NÃO confirma o pagamento.
-// - A confirmação é feita pelo /api/pagar-webhook.js.
+// - A confirmação final é feita pelo /api/pagar-webhook.js.
 
 import { neon } from "@neondatabase/serverless";
 import crypto from "node:crypto";
@@ -14,7 +14,8 @@ import crypto from "node:crypto";
 const sql = neon(process.env.DATABASE_URL);
 
 const API_BASE_URL =
-  process.env.PAGAR_API_BASE_URL || "https://api.pagar.co.mz/api/v1";
+  process.env.PAGAR_API_BASE_URL ||
+  "https://api.pagar.co.mz/api/v1";
 
 const API_KEY = process.env.PAGAR_API_KEY;
 const SIGNING_SECRET = process.env.PAGAR_SIGNING_SECRET;
@@ -23,13 +24,14 @@ const MIN_AMOUNT_MZN = 20;
 const MAX_AMOUNT_MZN = 40000;
 
 function json(res, status, data) {
-  res.status(status).json(data);
+  return res.status(status).json(data);
 }
 
 function safeBaseUrl() {
   try {
     const url = new URL(API_BASE_URL);
-    return `${url.origin}${url.pathname}`;
+
+    return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
   } catch {
     return "URL_INVALIDA";
   }
@@ -66,28 +68,64 @@ function createPagarSignature({
 
 async function pagarPost(path, body, idempotencyKey) {
   if (!API_KEY) {
-    const error = new Error("PAGAR_API_KEY não configurada.");
+    const error = new Error(
+      "PAGAR_API_KEY não configurada."
+    );
+
     error.code = "MISSING_API_KEY";
+
     throw error;
   }
 
   if (!SIGNING_SECRET) {
-    const error = new Error("PAGAR_SIGNING_SECRET não configurada.");
+    const error = new Error(
+      "PAGAR_SIGNING_SECRET não configurada."
+    );
+
     error.code = "MISSING_SIGNING_SECRET";
+
     throw error;
   }
 
-  let baseUrl;
+  const baseUrl = safeBaseUrl();
+
+  if (baseUrl === "URL_INVALIDA") {
+    const error = new Error(
+      "PAGAR_API_BASE_URL inválida."
+    );
+
+    error.code = "INVALID_BASE_URL";
+
+    throw error;
+  }
+
+  // IMPORTANTE:
+  // Construímos explicitamente a URL.
+  //
+  // Exemplo:
+  // https://api.pagar.co.mz/api/v1
+  // +
+  // /payments
+  //
+  // =
+  // https://api.pagar.co.mz/api/v1/payments
+
+  const urlString =
+    `${baseUrl}${path}`;
+
+  let url;
 
   try {
-    baseUrl = new URL(API_BASE_URL);
+    url = new URL(urlString);
   } catch {
-    const error = new Error("PAGAR_API_BASE_URL inválida.");
-    error.code = "INVALID_BASE_URL";
+    const error = new Error(
+      "URL final da Pagar inválida."
+    );
+
+    error.code = "INVALID_PAGAR_URL";
+
     throw error;
   }
-
-  const url = new URL(path, baseUrl);
 
   const timestamp = Date.now().toString();
 
@@ -102,6 +140,9 @@ async function pagarPost(path, body, idempotencyKey) {
     .update(rawBody)
     .digest("hex");
 
+  // Deve ser o pathname completo:
+  // /api/v1/payments
+
   const canonicalPath = url.pathname;
 
   const signature = createPagarSignature({
@@ -112,42 +153,60 @@ async function pagarPost(path, body, idempotencyKey) {
     bodyHash,
   });
 
-  console.log("USDTMZ PAGAR REQUEST:", {
-    base: safeBaseUrl(),
-    path: canonicalPath,
-    method: "POST",
-    environment:
-      API_KEY.startsWith("sk_test_")
-        ? "TEST"
-        : API_KEY.startsWith("sk_live_")
-        ? "LIVE"
-        : "DESCONHECIDO",
-  });
+  const environment =
+    API_KEY.startsWith("sk_test_")
+      ? "TEST"
+      : API_KEY.startsWith("sk_live_")
+      ? "LIVE"
+      : "DESCONHECIDO";
 
-  const response = await fetch(url.toString(), {
-    method: "POST",
+  console.log(
+    "USDTMZ PAGAR REQUEST:",
+    {
+      base: baseUrl,
+      path: canonicalPath,
+      method: "POST",
+      environment,
+    }
+  );
 
-    headers: {
-      Authorization: `Bearer ${API_KEY}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
+  const response = await fetch(
+    url.toString(),
+    {
+      method: "POST",
 
-      "Idempotency-Key": idempotencyKey,
+      headers: {
+        Authorization:
+          `Bearer ${API_KEY}`,
 
-      "X-Pagar-Timestamp": timestamp,
-      "X-Pagar-Nonce": nonce,
-      "X-Pagar-Signature": `v1=${signature}`,
-    },
+        "Content-Type":
+          "application/json",
 
-    body: rawBody,
-  });
+        "Idempotency-Key":
+          idempotencyKey,
+
+        "X-Pagar-Timestamp":
+          timestamp,
+
+        "X-Pagar-Nonce":
+          nonce,
+
+        "X-Pagar-Signature":
+          `v1=${signature}`,
+      },
+
+      body: rawBody,
+    }
+  );
 
   const text = await response.text();
 
-  let data;
+  let data = {};
 
   try {
-    data = text ? JSON.parse(text) : {};
+    data = text
+      ? JSON.parse(text)
+      : {};
   } catch {
     data = {
       raw: text.slice(0, 500),
@@ -168,29 +227,48 @@ async function pagarPost(path, body, idempotencyKey) {
       `Pagar HTTP ${response.status}`
     );
 
-    error.httpStatus = response.status;
+    error.httpStatus =
+      response.status;
+
     error.code =
       data?.code ||
       data?.errorCode ||
       data?.error_code ||
+      data?.error ||
       "PAGAR_ERROR";
 
-    error.requestId = requestId;
+    error.requestId =
+      requestId;
 
-    console.error("USDTMZ PAGAR ERROR:", {
-      httpStatus: error.httpStatus,
-      code: error.code,
-      requestId: error.requestId,
-      message: error.message,
-    });
+    console.error(
+      "USDTMZ PAGAR ERROR:",
+      {
+        httpStatus:
+          error.httpStatus,
+
+        code:
+          error.code,
+
+        requestId:
+          error.requestId,
+
+        message:
+          error.message,
+      }
+    );
 
     throw error;
   }
 
-  console.log("USDTMZ PAGAR SUCCESS:", {
-    httpStatus: response.status,
-    requestId,
-  });
+  console.log(
+    "USDTMZ PAGAR SUCCESS:",
+    {
+      httpStatus:
+        response.status,
+
+      requestId,
+    }
+  );
 
   return {
     data,
@@ -198,7 +276,10 @@ async function pagarPost(path, body, idempotencyKey) {
   };
 }
 
-export default async function handler(req, res) {
+export default async function handler(
+  req,
+  res
+) {
   if (req.method !== "POST") {
     return json(res, 405, {
       success: false,
@@ -210,23 +291,35 @@ export default async function handler(req, res) {
     if (!process.env.DATABASE_URL) {
       return json(res, 500, {
         success: false,
-        error: "DATABASE_URL não configurada.",
+        error:
+          "DATABASE_URL não configurada.",
       });
     }
 
-    if (!API_KEY || !SIGNING_SECRET) {
+    if (!API_KEY) {
       return json(res, 500, {
         success: false,
-        error: "Credenciais da Pagar não configuradas no servidor.",
+        error:
+          "PAGAR_API_KEY não configurada.",
       });
     }
 
-    const { orderId } = req.body || {};
+    if (!SIGNING_SECRET) {
+      return json(res, 500, {
+        success: false,
+        error:
+          "PAGAR_SIGNING_SECRET não configurada.",
+      });
+    }
+
+    const { orderId } =
+      req.body || {};
 
     if (!orderId) {
       return json(res, 400, {
         success: false,
-        error: "orderId é obrigatório.",
+        error:
+          "orderId é obrigatório.",
       });
     }
 
@@ -246,38 +339,55 @@ export default async function handler(req, res) {
         mpesa_transaction_id,
         emola_transaction_id
       FROM orders
-      WHERE order_id = ${String(orderId)}
+      WHERE order_id = ${String(orderId).trim()}
       LIMIT 1
     `;
 
     if (rows.length === 0) {
       return json(res, 404, {
         success: false,
-        error: "Pedido não encontrado.",
+        error:
+          "Pedido não encontrado.",
       });
     }
 
     const order = rows[0];
 
-    // Se já existe pagamento Pagar, não criar outro.
+    // Se já existe pagamento Pagar,
+    // não criar outro.
+
     if (order.pagar_payment_id) {
       return json(res, 200, {
         success: true,
         alreadyCreated: true,
+
         payment: {
-          id: order.pagar_payment_id,
-          status: order.status,
+          id:
+            order.pagar_payment_id,
+
+          status:
+            order.status,
         },
+
         order: {
-          orderId: order.order_id,
-          amountMzn: Number(order.amount),
-          usdtAmount: Number(order.usdt_amount),
-          method: order.payment,
+          orderId:
+            order.order_id,
+
+          amountMzn:
+            Number(order.amount),
+
+          usdtAmount:
+            Number(order.usdt_amount),
+
+          method:
+            order.payment,
         },
       });
     }
 
-    // Não iniciar pagamento para pedidos já finalizados.
+    // Não iniciar pagamento
+    // para pedidos finalizados.
+
     if (
       order.status === "PAID" ||
       order.status === "COMPLETED" ||
@@ -286,120 +396,232 @@ export default async function handler(req, res) {
     ) {
       return json(res, 409, {
         success: false,
-        error: `O pedido está no estado ${order.status}.`,
+        error:
+          `O pedido está no estado ${order.status}.`,
       });
     }
 
-    const amountMzn = Number(order.amount);
+    const amountMzn =
+      Number(order.amount);
 
     if (
-      !Number.isSafeInteger(amountMzn) ||
-      amountMzn < MIN_AMOUNT_MZN ||
-      amountMzn > MAX_AMOUNT_MZN
+      !Number.isSafeInteger(
+        amountMzn
+      ) ||
+      amountMzn <
+        MIN_AMOUNT_MZN ||
+      amountMzn >
+        MAX_AMOUNT_MZN
     ) {
       return json(res, 400, {
         success: false,
-        error: `O valor deve estar entre ${MIN_AMOUNT_MZN} e ${MAX_AMOUNT_MZN} MZN.`,
+        error:
+          `O valor deve estar entre ${MIN_AMOUNT_MZN} e ${MAX_AMOUNT_MZN} MZN.`,
       });
     }
 
-    const phone = String(order.phone || "").trim();
+    const phone =
+      String(order.phone || "")
+        .trim();
 
     if (!isValidPhone(phone)) {
       return json(res, 400, {
         success: false,
-        error: "Número de telefone inválido.",
+        error:
+          "Número de telefone inválido.",
       });
     }
 
-    const method = String(order.payment || "")
-      .trim()
-      .toUpperCase();
+    const method =
+      String(order.payment || "")
+        .trim()
+        .toUpperCase();
 
     if (!isValidMethod(method)) {
       return json(res, 400, {
         success: false,
-        error: "Método de pagamento inválido.",
+        error:
+          "Método de pagamento inválido.",
       });
     }
 
-    const reference = String(order.order_id);
+    const reference =
+      String(order.order_id);
 
     const body = {
       reference,
-      title: "Compra USDTMZ",
-      description: `Compra de ${order.usdt_amount} USDT`,
+
+      title:
+        "Compra USDTMZ",
+
+      description:
+        `Compra de ${order.usdt_amount} USDT`,
+
       amountMzn,
+
       method,
-      payerPhone: phone,
+
+      payerPhone:
+        phone,
     };
 
-    const idempotencyKey = `payment:${reference}`;
+    // A mesma idempotency key
+    // protege contra duplicação.
+
+    const idempotencyKey =
+      `payment:${reference}`;
 
     let result;
 
     try {
-      result = await pagarPost(
-        "/payments",
-        body,
-        idempotencyKey
-      );
+      result =
+        await pagarPost(
+          "/payments",
+          body,
+          idempotencyKey
+        );
     } catch (error) {
+
       if (
         error.httpStatus === 401 ||
         error.httpStatus === 403
       ) {
         return json(res, 502, {
           success: false,
-          error: "A Pagar recusou a autenticação da API.",
-          code: error.code || "AUTH_ERROR",
-          requestId: error.requestId || null,
+
+          error:
+            "A Pagar recusou a autenticação da API.",
+
+          code:
+            error.code ||
+            "AUTH_ERROR",
+
+          requestId:
+            error.requestId ||
+            null,
         });
       }
 
-      if (error.httpStatus === 409) {
+      if (
+        error.httpStatus === 404
+      ) {
+        console.error(
+          "USDTMZ PAGAR 404:",
+          {
+            base:
+              safeBaseUrl(),
+
+            path:
+              "/api/v1/payments",
+
+            requestId:
+              error.requestId,
+
+            code:
+              error.code,
+
+            message:
+              error.message,
+          }
+        );
+
+        return json(res, 502, {
+          success: false,
+
+          error:
+            "A rota de pagamentos da Pagar não foi encontrada.",
+
+          code:
+            error.code ||
+            "PAGAR_ROUTE_NOT_FOUND",
+
+          requestId:
+            error.requestId ||
+            null,
+        });
+      }
+
+      if (
+        error.httpStatus === 409
+      ) {
         return json(res, 409, {
           success: false,
-          error: "A Pagar informou um conflito para este pagamento.",
-          code: error.code || "CONFLICT",
-          requestId: error.requestId || null,
+
+          error:
+            "A Pagar informou um conflito para este pagamento.",
+
+          code:
+            error.code ||
+            "CONFLICT",
+
+          requestId:
+            error.requestId ||
+            null,
         });
       }
 
-      if (error.httpStatus === 429) {
+      if (
+        error.httpStatus === 429
+      ) {
         return json(res, 429, {
           success: false,
-          error: "A Pagar limitou temporariamente os pedidos.",
-          requestId: error.requestId || null,
+
+          error:
+            "A Pagar limitou temporariamente os pedidos.",
+
+          requestId:
+            error.requestId ||
+            null,
         });
       }
 
-      console.error("USDTMZ PAYMENT ERROR:", {
-        code: error.code,
-        httpStatus: error.httpStatus,
-        requestId: error.requestId,
-        message: error.message,
-      });
+      console.error(
+        "USDTMZ PAYMENT ERROR:",
+        {
+          code:
+            error.code,
+
+          httpStatus:
+            error.httpStatus,
+
+          requestId:
+            error.requestId,
+
+          message:
+            error.message,
+        }
+      );
 
       return json(res, 502, {
         success: false,
-        error: "Não foi possível iniciar o pagamento na Pagar.",
-        code: error.code || "PAGAR_ERROR",
-        requestId: error.requestId || null,
+
+        error:
+          "Não foi possível iniciar o pagamento na Pagar.",
+
+        code:
+          error.code ||
+          "PAGAR_ERROR",
+
+        requestId:
+          error.requestId ||
+          null,
       });
     }
 
-    const data = result.data || {};
+    const data =
+      result.data || {};
 
     const pagarPaymentId =
       data.id ||
       data.paymentId ||
       data.payment_id ||
+      data.payment?.id ||
       null;
 
     const providerTransactionId =
       data.transactionId ||
       data.transaction_id ||
+      data.payment?.providerTransactionId ||
       null;
 
     if (!pagarPaymentId) {
@@ -409,15 +631,22 @@ export default async function handler(req, res) {
 
       return json(res, 502, {
         success: false,
-        error: "A Pagar não devolveu o ID do pagamento.",
-        requestId: result.requestId || null,
+
+        error:
+          "A Pagar não devolveu o ID do pagamento.",
+
+        requestId:
+          result.requestId ||
+          null,
       });
     }
 
     await sql`
       UPDATE orders
       SET
-        pagar_payment_id = ${String(pagarPaymentId)},
+        pagar_payment_id =
+          ${String(pagarPaymentId)},
+
         mpesa_transaction_id =
           CASE
             WHEN ${method} = 'MPESA'
@@ -427,6 +656,7 @@ export default async function handler(req, res) {
             )
             ELSE mpesa_transaction_id
           END,
+
         emola_transaction_id =
           CASE
             WHEN ${method} = 'EMOLA'
@@ -436,40 +666,71 @@ export default async function handler(req, res) {
             )
             ELSE emola_transaction_id
           END,
+
         updated_at = NOW()
-      WHERE order_id = ${reference}
+
+      WHERE order_id =
+        ${reference}
     `;
 
     return json(res, 202, {
       success: true,
-      message: "Pagamento iniciado. Aguarde a confirmação.",
+
+      message:
+        "Pagamento iniciado. Aguarde a confirmação.",
+
       payment: {
-        id: String(pagarPaymentId),
+        id:
+          String(pagarPaymentId),
+
         status:
           data.status ||
           data.paymentStatus ||
+          data.payment?.status ||
           "PENDING",
       },
+
       order: {
-        orderId: reference,
+        orderId:
+          reference,
+
         amountMzn,
-        usdtAmount: Number(order.usdt_amount),
+
+        usdtAmount:
+          Number(order.usdt_amount),
+
         method,
       },
-      requestId: result.requestId || null,
+
+      requestId:
+        result.requestId ||
+        null,
     });
 
   } catch (error) {
-    console.error("USDTMZ PAYMENT INTERNAL ERROR:", {
-      code: error.code,
-      message: error.message,
-      httpStatus: error.httpStatus,
-      requestId: error.requestId,
-    });
+
+    console.error(
+      "USDTMZ PAYMENT INTERNAL ERROR:",
+      {
+        code:
+          error.code,
+
+        message:
+          error.message,
+
+        httpStatus:
+          error.httpStatus,
+
+        requestId:
+          error.requestId,
+      }
+    );
 
     return json(res, 500, {
       success: false,
-      error: "Erro interno ao iniciar o pagamento.",
+
+      error:
+        "Erro interno ao iniciar o pagamento.",
     });
   }
 }
