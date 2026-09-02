@@ -5,6 +5,10 @@
 //
 // FLUXO:
 //
+// PENDING
+//    ↓
+// ADMIN AUTORIZA
+//    ↓
 // AUTHORIZED
 //    ↓
 // validação
@@ -20,24 +24,34 @@
 // TXID
 //    ↓
 // PROCESSING
+//    ↓
+// confirmação on-chain
+//    ↓
+// COMPLETED
 //
 // IMPORTANTE:
 //
 // - TRON_PRIVATE_KEY fica somente no servidor
 // - nunca é enviada ao frontend
 // - não usa TronLink
-// - não abre site externo
-// - não transmite uma retirada que não esteja AUTHORIZED
-//
-// Depois do broadcast:
-// PROCESSING
-//
-// A confirmação final deve ser feita por uma rotina de
-// confirmação blockchain antes de marcar COMPLETED.
+// - não aceita user_id enviado pelo navegador
+// - trabalha com a carteira interna "owner"
+// - não marca COMPLETED antes da confirmação blockchain
 //
 
 import { neon } from "@neondatabase/serverless";
 import TronWeb from "tronweb";
+
+const NETWORK = "TRON Mainnet";
+const ASSET = "USDT";
+const STANDARD = "TRC-20";
+
+const USER_ID = "owner";
+
+const USDT_DECIMALS = 6;
+
+const USDT_CONTRACT =
+  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 
 const TRON_HOST =
   process.env.TRON_HOST ||
@@ -48,17 +62,6 @@ const TRONGRID_API_KEY =
 
 const TRON_PRIVATE_KEY =
   process.env.TRON_PRIVATE_KEY || "";
-
-const USDT_CONTRACT =
-  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
-
-const NETWORK =
-  "TRON Mainnet";
-
-const ASSET =
-  "USDT";
-
-const USDT_DECIMALS = 6;
 
 const MAX_WITHDRAWAL_USDT =
   1_000_000;
@@ -85,6 +88,29 @@ function json(res, status, data) {
   return res
     .status(status)
     .json(data);
+}
+
+
+/*
+ * =========================================================
+ * BODY
+ * =========================================================
+ */
+
+function getBody(req) {
+  if (!req.body) {
+    return {};
+  }
+
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      return {};
+    }
+  }
+
+  return req.body;
 }
 
 
@@ -128,23 +154,28 @@ function parseUsdtAmount(value) {
       "0"
     );
 
-  const raw =
-    BigInt(whole) *
-      1_000_000n +
-    BigInt(padded);
+  try {
+    const raw =
+      BigInt(whole) *
+        1_000_000n +
+      BigInt(padded);
 
-  const max =
-    BigInt(MAX_WITHDRAWAL_USDT) *
-    1_000_000n;
+    const max =
+      BigInt(MAX_WITHDRAWAL_USDT) *
+      1_000_000n;
 
-  if (
-    raw <= 0n ||
-    raw > max
-  ) {
+    if (
+      raw <= 0n ||
+      raw > max
+    ) {
+      return null;
+    }
+
+    return raw;
+
+  } catch {
     return null;
   }
-
-  return raw;
 }
 
 
@@ -155,23 +186,28 @@ function parseUsdtAmount(value) {
  */
 
 function formatUsdtAmount(raw) {
-  const value =
-    BigInt(raw);
+  try {
+    const value =
+      BigInt(raw);
 
-  const whole =
-    value / 1_000_000n;
+    const whole =
+      value / 1_000_000n;
 
-  const decimal =
-    (
-      value % 1_000_000n
-    )
-      .toString()
-      .padStart(
-        USDT_DECIMALS,
-        "0"
-      );
+    const decimal =
+      (
+        value % 1_000_000n
+      )
+        .toString()
+        .padStart(
+          USDT_DECIMALS,
+          "0"
+        );
 
-  return `${whole}.${decimal}`;
+    return `${whole}.${decimal}`;
+
+  } catch {
+    return "0.000000";
+  }
 }
 
 
@@ -294,9 +330,7 @@ function createTronWeb() {
  * =========================================================
  */
 
-function getServerAddress(
-  tronWeb
-) {
+function getServerAddress(tronWeb) {
   const address =
     tronWeb.address.fromPrivateKey(
       getPrivateKey()
@@ -306,7 +340,7 @@ function getServerAddress(
     !isValidTronAddress(address)
   ) {
     throw new Error(
-      "A chave privada não corresponde a um endereço TRON válido."
+      "A chave privada não corresponde a uma carteira TRON válida."
     );
   }
 
@@ -320,45 +354,16 @@ function getServerAddress(
  * =========================================================
  */
 
-async function getAccount(
-  address
-) {
+async function getAccount(address) {
   return tronRequest(
     "/wallet/getaccount",
     {
-      method:
-        "POST",
+      method: "POST",
 
-      body:
-        JSON.stringify({
-          address,
-          visible: true
-        })
-    }
-  );
-}
-
-
-/*
- * =========================================================
- * ACCOUNT RESOURCES
- * =========================================================
- */
-
-async function getAccountResources(
-  address
-) {
-  return tronRequest(
-    "/wallet/getaccountresource",
-    {
-      method:
-        "POST",
-
-      body:
-        JSON.stringify({
-          address,
-          visible: true
-        })
+      body: JSON.stringify({
+        address,
+        visible: true
+      })
     }
   );
 }
@@ -370,15 +375,12 @@ async function getAccountResources(
  * =========================================================
  */
 
-async function getUsdtBalance(
-  address
-) {
+async function getUsdtBalance(address) {
   const data =
     await tronRequest(
       `/v1/accounts/${address}/trc20/balance?contract_address=${USDT_CONTRACT}`,
       {
-        method:
-          "GET"
+        method: "GET"
       }
     );
 
@@ -388,21 +390,19 @@ async function getUsdtBalance(
       : [];
 
   const token =
-    items.find(
-      item => {
-        const contract =
-          String(
-            item?.token_id ||
-            item?.contract_address ||
-            ""
-          ).toLowerCase();
+    items.find(item => {
+      const contract =
+        String(
+          item?.token_id ||
+          item?.contract_address ||
+          ""
+        ).toLowerCase();
 
-        return (
-          contract ===
-          USDT_CONTRACT.toLowerCase()
-        );
-      }
-    );
+      return (
+        contract ===
+        USDT_CONTRACT.toLowerCase()
+      );
+    });
 
   if (!token) {
     return 0n;
@@ -423,7 +423,28 @@ async function getUsdtBalance(
 
 /*
  * =========================================================
- * ABI PARAMETER
+ * ACCOUNT RESOURCES
+ * =========================================================
+ */
+
+async function getAccountResources(address) {
+  return tronRequest(
+    "/wallet/getaccountresource",
+    {
+      method: "POST",
+
+      body: JSON.stringify({
+        address,
+        visible: true
+      })
+    }
+  );
+}
+
+
+/*
+ * =========================================================
+ * BUILD TRANSFER PARAMETER
  * =========================================================
  */
 
@@ -440,18 +461,12 @@ function buildTransferParameter(
   const addressHex =
     destinationHex
       .replace(/^41/, "")
-      .padStart(
-        64,
-        "0"
-      );
+      .padStart(64, "0");
 
   const amountHex =
     rawAmount
       .toString(16)
-      .padStart(
-        64,
-        "0"
-      );
+      .padStart(64, "0");
 
   return (
     addressHex +
@@ -462,7 +477,7 @@ function buildTransferParameter(
 
 /*
  * =========================================================
- * SIMULAÇÃO
+ * SIMULATE TRANSFER
  * =========================================================
  */
 
@@ -482,28 +497,24 @@ async function simulateTransfer(
   return tronRequest(
     "/wallet/triggerconstantcontract",
     {
-      method:
-        "POST",
+      method: "POST",
 
-      body:
-        JSON.stringify({
-          owner_address:
-            sender,
+      body: JSON.stringify({
+        owner_address:
+          sender,
 
-          contract_address:
-            USDT_CONTRACT,
+        contract_address:
+          USDT_CONTRACT,
 
-          function_selector:
-            "transfer(address,uint256)",
+        function_selector:
+          "transfer(address,uint256)",
 
-          parameter,
+        parameter,
 
-          call_value:
-            0,
+        call_value: 0,
 
-          visible:
-            true
-        })
+        visible: true
+      })
     }
   );
 }
@@ -511,7 +522,7 @@ async function simulateTransfer(
 
 /*
  * =========================================================
- * CONSTRUIR TRANSAÇÃO
+ * BUILD TRANSACTION
  * =========================================================
  */
 
@@ -539,17 +550,12 @@ async function buildTransaction(
 
         [
           {
-            type:
-              "address",
-
-            value:
-              destination
+            type: "address",
+            value: destination
           },
 
           {
-            type:
-              "uint256",
-
+            type: "uint256",
             value:
               rawAmount.toString()
           }
@@ -574,12 +580,7 @@ async function buildTransaction(
 
 /*
  * =========================================================
- * ASSINATURA
- * =========================================================
- *
- * A assinatura acontece no servidor.
- *
- * A chave privada NUNCA sai do ambiente do servidor.
+ * SIGN
  * =========================================================
  */
 
@@ -621,9 +622,7 @@ async function broadcastTransaction(
       signedTransaction
     );
 
-  if (
-    !result
-  ) {
+  if (!result) {
     throw new Error(
       "TRON não retornou resultado do broadcast."
     );
@@ -654,8 +653,7 @@ export default async function handler(
   res
 ) {
   if (
-    req.method !==
-    "POST"
+    req.method !== "POST"
   ) {
     res.setHeader(
       "Allow",
@@ -666,21 +664,18 @@ export default async function handler(
       res,
       405,
       {
-        success:
-          false,
-
+        success: false,
         error:
           "Método não permitido."
       }
     );
   }
 
-
   try {
 
     /*
      * =====================================================
-     * CONFIGURAÇÃO
+     * CONFIG
      * =====================================================
      */
 
@@ -691,15 +686,12 @@ export default async function handler(
         res,
         500,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "DATABASE_URL não configurada."
         }
       );
     }
-
 
     if (
       !TRONGRID_API_KEY
@@ -708,15 +700,12 @@ export default async function handler(
         res,
         500,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "TRONGRID_API_KEY não configurada."
         }
       );
     }
-
 
     if (
       !TRON_PRIVATE_KEY
@@ -725,37 +714,26 @@ export default async function handler(
         res,
         500,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "TRON_PRIVATE_KEY não configurada."
         }
       );
     }
 
-
     const sql =
       neon(
         process.env.DATABASE_URL
       );
 
-
-    /*
-     * =====================================================
-     * BODY
-     * =====================================================
-     */
-
     const body =
-      req.body || {};
+      getBody(req);
 
     const withdrawalId =
       String(
         body.withdrawal_id ||
         ""
       ).trim();
-
 
     if (
       !withdrawalId
@@ -764,9 +742,7 @@ export default async function handler(
         res,
         400,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "withdrawal_id é obrigatório."
         }
@@ -782,58 +758,34 @@ export default async function handler(
 
     const rows =
       await sql`
-
         SELECT
-
-          id,
-
           withdrawal_id,
-
+          user_id,
           destination_address,
-
-          asset,
-
-          network,
-
-          amount,
-
-          amount_requested,
-
-          withdrawal_fee,
-
           amount_to_send,
-
+          asset,
+          network,
           status,
-
           tx_hash,
-
-          order_id,
-
           created_at,
-
           updated_at
-
         FROM withdrawals
-
         WHERE withdrawal_id =
           ${withdrawalId}
-
+          AND user_id =
+          ${USER_ID}
         LIMIT 1
-
       `;
 
 
     if (
-      rows.length ===
-      0
+      rows.length === 0
     ) {
       return json(
         res,
         404,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "Retirada não encontrada."
         }
@@ -854,20 +806,18 @@ export default async function handler(
 
     /*
      * =====================================================
-     * JÁ COMPLETADA
+     * COMPLETED
      * =====================================================
      */
 
     if (
-      status ===
-      "COMPLETED"
+      status === "COMPLETED"
     ) {
       return json(
         res,
         200,
         {
-          success:
-            true,
+          success: true,
 
           already_completed:
             true,
@@ -880,7 +830,8 @@ export default async function handler(
               withdrawal.status,
 
             tx_hash:
-              withdrawal.tx_hash
+              withdrawal.tx_hash ||
+              null
           }
         }
       );
@@ -889,26 +840,21 @@ export default async function handler(
 
     /*
      * =====================================================
-     * JÁ PROCESSING COM TX
+     * PROCESSING COM TX
      * =====================================================
      */
 
     if (
-      status ===
-        "PROCESSING" &&
+      status === "PROCESSING" &&
       withdrawal.tx_hash
     ) {
       return json(
         res,
         200,
         {
-          success:
-            true,
+          success: true,
 
           already_broadcast:
-            true,
-
-          broadcasted:
             true,
 
           withdrawal: {
@@ -928,32 +874,22 @@ export default async function handler(
 
     /*
      * =====================================================
-     * NÃO REPETIR PROCESSAMENTO
+     * PROCESSING SEM TX
      * =====================================================
      */
 
     if (
-      status ===
-        "PROCESSING" &&
+      status === "PROCESSING" &&
       !withdrawal.tx_hash
     ) {
       return json(
         res,
         409,
         {
-          success:
-            false,
+          success: false,
 
           error:
-            "Esta retirada já está em processamento. Não será transmitida novamente automaticamente.",
-
-          withdrawal: {
-            withdrawal_id:
-              withdrawal.withdrawal_id,
-
-            status:
-              withdrawal.status
-          }
+            "Esta retirada já está em processamento. Não será transmitida novamente."
         }
       );
     }
@@ -966,15 +902,13 @@ export default async function handler(
      */
 
     if (
-      status !==
-      "AUTHORIZED"
+      status !== "AUTHORIZED"
     ) {
       return json(
         res,
         409,
         {
-          success:
-            false,
+          success: false,
 
           error:
             "A retirada precisa estar AUTHORIZED antes do processamento.",
@@ -1008,9 +942,7 @@ export default async function handler(
         res,
         400,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "Asset inválido. Esperado USDT."
         }
@@ -1028,16 +960,13 @@ export default async function handler(
       String(
         withdrawal.network ||
         ""
-      ) !==
-      NETWORK
+      ) !== NETWORK
     ) {
       return json(
         res,
         400,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "Network inválida. Esperado TRON Mainnet."
         }
@@ -1057,7 +986,6 @@ export default async function handler(
         ""
       ).trim();
 
-
     if (
       !isValidTronAddress(
         destination
@@ -1067,9 +995,7 @@ export default async function handler(
         res,
         400,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "Endereço TRON de destino inválido."
         }
@@ -1085,22 +1011,17 @@ export default async function handler(
 
     const rawAmount =
       parseUsdtAmount(
-        withdrawal.amount_to_send ??
-        withdrawal.amount
+        withdrawal.amount_to_send
       );
 
-
     if (
-      rawAmount ===
-      null
+      rawAmount === null
     ) {
       return json(
         res,
         400,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "Valor USDT inválido."
         }
@@ -1110,56 +1031,38 @@ export default async function handler(
 
     /*
      * =====================================================
-     * CARTEIRA CONFIGURADA
+     * CARTEIRA MAINNET
      * =====================================================
      */
 
     const wallets =
       await sql`
-
         SELECT
-
           id,
-
           wallet_address,
-
           network,
-
           asset,
-
-          balance,
-
           status
-
         FROM wallets
-
         WHERE network =
           ${NETWORK}
-
           AND asset =
           ${ASSET}
-
           AND status =
           'mainnet'
-
         ORDER BY id DESC
-
         LIMIT 1
-
       `;
 
 
     if (
-      wallets.length ===
-      0
+      wallets.length === 0
     ) {
       return json(
         res,
         404,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "Carteira USDT Mainnet não encontrada."
         }
@@ -1183,9 +1086,7 @@ export default async function handler(
         res,
         500,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "Carteira USDT Mainnet inválida."
         }
@@ -1205,7 +1106,7 @@ export default async function handler(
 
     /*
      * =====================================================
-     * CONFIRMAR CHAVE → CARTEIRA
+     * CONFIRMAR CHAVE
      * =====================================================
      */
 
@@ -1223,9 +1124,7 @@ export default async function handler(
         res,
         500,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "TRON_PRIVATE_KEY não corresponde à carteira Mainnet configurada."
         }
@@ -1244,13 +1143,11 @@ export default async function handler(
         sender
       );
 
-
     const trxSun =
       Number(
         account?.balance ||
         0
       );
-
 
     const trxBalance =
       trxSun /
@@ -1266,9 +1163,7 @@ export default async function handler(
         res,
         502,
         {
-          success:
-            false,
-
+          success: false,
           error:
             "Não foi possível consultar o saldo TRX."
         }
@@ -1287,20 +1182,17 @@ export default async function handler(
         sender
       );
 
-
     const energyLimit =
       Number(
         resources?.EnergyLimit ||
         0
       );
 
-
     const energyUsed =
       Number(
         resources?.EnergyUsed ||
         0
       );
-
 
     const energyAvailable =
       Math.max(
@@ -1309,20 +1201,17 @@ export default async function handler(
         energyUsed
       );
 
-
     const bandwidthLimit =
       Number(
         resources?.NetLimit ||
         0
       );
 
-
     const bandwidthUsed =
       Number(
         resources?.NetUsed ||
         0
       );
-
 
     const bandwidthAvailable =
       Math.max(
@@ -1352,8 +1241,7 @@ export default async function handler(
         res,
         400,
         {
-          success:
-            false,
+          success: false,
 
           error:
             "Saldo USDT real insuficiente na carteira TRON.",
@@ -1395,8 +1283,7 @@ export default async function handler(
         res,
         400,
         {
-          success:
-            false,
+          success: false,
 
           error:
             "A simulação da transferência TRC-20 falhou.",
@@ -1430,58 +1317,44 @@ export default async function handler(
 
     /*
      * =====================================================
-     * RESERVAR RETIRADA
+     * RESERVAR
      * =====================================================
      *
-     * Esta atualização acontece antes da assinatura.
+     * Somente uma execução pode assumir
+     * AUTHORIZED → PROCESSING.
      *
-     * Apenas uma requisição pode mudar:
-     *
-     * AUTHORIZED → PROCESSING
-     *
+     * Não usamos user_id do frontend.
      * =====================================================
      */
 
     const locked =
       await sql`
-
         UPDATE withdrawals
-
         SET
-
-          status =
-            'PROCESSING',
-
-          updated_at =
-            NOW()
-
-        WHERE withdrawal_id =
-          ${withdrawalId}
-
+          status = 'PROCESSING',
+          updated_at = NOW()
+        WHERE
+          withdrawal_id =
+            ${withdrawalId}
+          AND user_id =
+            ${USER_ID}
           AND status =
             'AUTHORIZED'
-
           AND tx_hash IS NULL
-
         RETURNING
-
           withdrawal_id,
-
           status
-
       `;
 
 
     if (
-      locked.length ===
-      0
+      locked.length === 0
     ) {
       return json(
         res,
         409,
         {
-          success:
-            false,
+          success: false,
 
           error:
             "A retirada já foi processada ou está sendo processada por outra execução."
@@ -1508,33 +1381,19 @@ export default async function handler(
 
     } catch (error) {
 
-      /*
-       * A assinatura falhou.
-       *
-       * Voltamos para AUTHORIZED para permitir
-       * nova tentativa controlada.
-       */
-
       await sql`
-
         UPDATE withdrawals
-
         SET
-
-          status =
-            'AUTHORIZED',
-
-          updated_at =
-            NOW()
-
-        WHERE withdrawal_id =
-          ${withdrawalId}
-
+          status = 'AUTHORIZED',
+          updated_at = NOW()
+        WHERE
+          withdrawal_id =
+            ${withdrawalId}
+          AND user_id =
+            ${USER_ID}
           AND status =
             'PROCESSING'
-
           AND tx_hash IS NULL
-
       `;
 
       throw error;
@@ -1558,25 +1417,18 @@ export default async function handler(
     if (!txID) {
 
       await sql`
-
         UPDATE withdrawals
-
         SET
-
-          status =
-            'AUTHORIZED',
-
-          updated_at =
-            NOW()
-
-        WHERE withdrawal_id =
-          ${withdrawalId}
-
+          status = 'AUTHORIZED',
+          updated_at = NOW()
+        WHERE
+          withdrawal_id =
+            ${withdrawalId}
+          AND user_id =
+            ${USER_ID}
           AND status =
             'PROCESSING'
-
           AND tx_hash IS NULL
-
       `;
 
       throw new Error(
@@ -1591,29 +1443,23 @@ export default async function handler(
      * =====================================================
      */
 
-    let broadcast;
-
     try {
 
-      broadcast =
-        await broadcastTransaction(
-          tronWeb,
-          signedTransaction
-        );
+      await broadcastTransaction(
+        tronWeb,
+        signedTransaction
+      );
 
     } catch (error) {
 
       /*
-       * IMPORTANTE:
+       * NÃO voltamos para AUTHORIZED.
        *
-       * Se o broadcast chegar à TRON mas a resposta
-       * se perder, não podemos simplesmente voltar
-       * para AUTHORIZED e transmitir outra vez.
+       * O broadcast pode ter chegado à TRON
+       * e a resposta pode ter sido perdida.
        *
-       * Por segurança, mantemos PROCESSING.
-       *
-       * Uma rotina de confirmação deverá consultar
-       * o txID e determinar se a transação entrou na rede.
+       * Mantemos PROCESSING para evitar
+       * uma possível transferência duplicada.
        */
 
       console.error(
@@ -1626,8 +1472,7 @@ export default async function handler(
         res,
         502,
         {
-          success:
-            false,
+          success: false,
 
           broadcast_unknown:
             true,
@@ -1652,11 +1497,8 @@ export default async function handler(
 
     const saved =
       await sql`
-
         UPDATE withdrawals
-
         SET
-
           tx_hash =
             ${txID},
 
@@ -1666,8 +1508,12 @@ export default async function handler(
           updated_at =
             NOW()
 
-        WHERE withdrawal_id =
-          ${withdrawalId}
+        WHERE
+          withdrawal_id =
+            ${withdrawalId}
+
+          AND user_id =
+            ${USER_ID}
 
           AND status =
             'PROCESSING'
@@ -1675,39 +1521,25 @@ export default async function handler(
           AND tx_hash IS NULL
 
         RETURNING
-
           withdrawal_id,
-
           status,
-
           tx_hash
-
       `;
 
 
     if (
-      saved.length ===
-      0
+      saved.length === 0
     ) {
-
-      /*
-       * A transação já foi transmitida.
-       *
-       * Não tentamos transmitir novamente.
-       */
-
       return json(
         res,
         200,
         {
-          success:
-            true,
+          success: true,
 
-          broadcasted:
-            true,
+          broadcasted: true,
 
           warning:
-            "A transação foi transmitida, mas o estado do banco mudou antes da gravação do TXID.",
+            "A transação foi transmitida, mas o estado da retirada mudou antes da gravação do TXID.",
 
           withdrawal_id:
             withdrawalId,
@@ -1720,7 +1552,7 @@ export default async function handler(
 
     /*
      * =====================================================
-     * RESPOSTA FINAL
+     * RESPOSTA
      * =====================================================
      */
 
@@ -1728,21 +1560,20 @@ export default async function handler(
       res,
       200,
       {
+        success: true,
 
-        success:
-          true,
+        broadcasted: true,
 
-        broadcasted:
-          true,
-
-        signed:
-          true,
+        signed: true,
 
         mode:
           "BROADCASTED",
 
         withdrawal_id:
           withdrawalId,
+
+        user_id:
+          USER_ID,
 
         sender,
 
@@ -1755,7 +1586,7 @@ export default async function handler(
           NETWORK,
 
         standard:
-          "TRC-20",
+          STANDARD,
 
         contract:
           USDT_CONTRACT,
@@ -1772,7 +1603,6 @@ export default async function handler(
           "PROCESSING",
 
         blockchain: {
-
           usdt_balance_before:
             formatUsdtAmount(
               blockchainBalance
@@ -1780,23 +1610,18 @@ export default async function handler(
 
           trx_balance:
             trxBalance
-
         },
 
         resources: {
-
           energy_available:
             energyAvailable,
 
           bandwidth_available:
             bandwidthAvailable
-
         },
 
         validation: {
-
-          authorized:
-            true,
+          authorized: true,
 
           destination_valid:
             true,
@@ -1812,12 +1637,10 @@ export default async function handler(
 
           wallet_matches_server_key:
             true
-
         },
 
         confirmation:
-          "A transação foi transmitida para a TRON. A retirada deve permanecer PROCESSING até confirmação on-chain."
-
+          "A transação foi transmitida para a TRON. A retirada permanece PROCESSING até confirmação on-chain."
       }
     );
 
@@ -1833,22 +1656,10 @@ export default async function handler(
       res,
       500,
       {
-
-        success:
-          false,
+        success: false,
 
         error:
-          "Erro interno ao processar a retirada.",
-
-        details:
-          process.env.NODE_ENV ===
-          "development"
-            ? (
-                error?.message ||
-                String(error)
-              )
-            : undefined
-
+          "Erro interno ao processar a retirada."
       }
     );
   }
