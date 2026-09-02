@@ -2,6 +2,7 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0"
@@ -617,11 +618,6 @@
   /*
    * =======================================================
    * CONVERSOR
-   *
-   * Exemplo:
-   *
-   * 1000 MZN → 20 USDT
-   *
    * =======================================================
    */
 
@@ -647,25 +643,13 @@
     const usdt =
       amount / CONFIG.rate;
 
-
-    /*
-     * Remove zeros desnecessários.
-     *
-     * 20.000000 → 20
-     * 20.500000 → 20.5
-     */
-
     const usdtFormatted =
       Number(usdt.toFixed(6))
         .toString();
 
-
     const amountFormatted =
       Number(amount)
-        .toLocaleString(
-          "pt-MZ"
-        );
-
+        .toLocaleString("pt-MZ");
 
     conversionDisplay.textContent =
       amountFormatted +
@@ -673,11 +657,9 @@
       usdtFormatted +
       " USDT";
 
-
     usdtPreview.textContent =
       usdtFormatted +
       " USDT";
-
   }
 
 
@@ -712,16 +694,6 @@
     element.classList.remove(
       "hidden"
     );
-
-  }
-
-
-  function hide(element) {
-
-    element.classList.add(
-      "hidden"
-    );
-
   }
 
 
@@ -747,7 +719,6 @@
 
 
     let data = null;
-
 
     try {
 
@@ -781,7 +752,6 @@
 
 
     return data;
-
   }
 
 
@@ -922,7 +892,6 @@
         throw new Error(
           "O servidor não devolveu um pedido válido."
         );
-
       }
 
 
@@ -1000,9 +969,7 @@
 
       button.textContent =
         "Continuar";
-
     }
-
   }
 
 
@@ -1079,13 +1046,15 @@
           ).toUpperCase()
 
       ].join("\n");
-
   }
 
 
   /*
    * =======================================================
    * INICIAR PAGAMENTO
+   *
+   * CORREÇÃO:
+   * O backend /api/payment.js espera "orderId".
    * =======================================================
    */
 
@@ -1103,7 +1072,8 @@
 
 
     if (
-      !currentOrder?.order_id
+      !currentOrder ||
+      !currentOrder.order_id
     ) {
 
       showResult(
@@ -1116,6 +1086,12 @@
     }
 
 
+    const orderId =
+      String(
+        currentOrder.order_id
+      ).trim();
+
+
     button.disabled =
       true;
 
@@ -1124,6 +1100,16 @@
 
 
     try {
+
+      /*
+       * Enviamos exatamente:
+       *
+       * {
+       *   orderId: "USDTMZ-..."
+       * }
+       *
+       * Não enviamos chaves ou segredos.
+       */
 
       const data =
         await apiFetch(
@@ -1134,19 +1120,28 @@
             body:
               JSON.stringify({
 
-                order_id:
-                  currentOrder.order_id,
-
-                payment:
-                  currentOrder.payment
+                orderId:
+                  orderId
 
               })
           }
         );
 
 
+      if (
+        !data?.success
+      ) {
+
+        throw new Error(
+          data?.error ||
+          "Não foi possível iniciar o pagamento."
+        );
+      }
+
+
       const payment =
-        data?.payment || {};
+        data.payment ||
+        {};
 
 
       const status =
@@ -1162,33 +1157,39 @@
         status;
 
 
-      if (
-        status ===
-        "PAYMENT_CONFIRMED"
-      ) {
+      showResult(
+        result,
 
-        showResult(
-          result,
+        [
+          "Pagamento iniciado com sucesso.",
 
-          "Pagamento confirmado.",
+          "",
 
-          "ok"
-        );
+          "Pedido: " +
+            orderId,
 
-      } else {
+          "",
 
-        showResult(
-          result,
+          "Estado: " +
+            status,
 
-          "Pagamento iniciado.\n\nAguarde a confirmação do pagamento.",
+          "",
 
-          "warning"
-        );
+          "Aguarde a confirmação do pagamento pela Pagar."
 
-      }
+        ].join("\n"),
+
+        "ok"
+      );
 
 
     } catch (error) {
+
+      console.error(
+        "USDTMZ PAYMENT FRONTEND ERROR:",
+        error
+      );
+
 
       showResult(
         result,
@@ -1199,6 +1200,7 @@
         "error"
       );
 
+
     } finally {
 
       button.disabled =
@@ -1206,9 +1208,7 @@
 
       button.textContent =
         "Pagar agora";
-
     }
-
   }
 
 
@@ -1250,7 +1250,6 @@
 
       "warning"
     );
-
   }
 
 
@@ -1268,7 +1267,6 @@
       .test(
         String(address || "").trim()
       );
-
   }
 
 
@@ -1288,7 +1286,6 @@
 
     return /^\d+(\.\d{1,6})?$/
       .test(text);
-
   }
 
 
@@ -1436,7 +1433,6 @@
         throw new Error(
           "O servidor não devolveu uma retirada válida."
         );
-
       }
 
 
@@ -1470,6 +1466,7 @@
           "",
 
           "A retirada aguarda autorização."
+
         ].join("\n"),
 
         "ok"
@@ -1487,6 +1484,7 @@
         "error"
       );
 
+
     } finally {
 
       button.disabled =
@@ -1494,9 +1492,7 @@
 
       button.textContent =
         "Solicitar retirada";
-
     }
-
   }
 
 
@@ -1549,7 +1545,6 @@
           data?.error ||
           "Carteira não disponível."
         );
-
       }
 
 
@@ -1625,9 +1620,7 @@
 
         "error"
       );
-
     }
-
   }
 
 
@@ -1658,8 +1651,8 @@
           "Blockchain:",
           data
         );
-
       }
+
 
     } catch (error) {
 
@@ -1667,9 +1660,7 @@
         "Blockchain:",
         error
       );
-
     }
-
   }
 
 
