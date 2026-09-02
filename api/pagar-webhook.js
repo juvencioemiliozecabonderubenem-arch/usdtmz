@@ -6,61 +6,32 @@ import crypto from "node:crypto";
  * USDTMZ — PAGAR WEBHOOK
  * POST /api/pagar-webhook
  *
- * Fluxo:
- *
- * Pagar
- *   ↓
- * payment.succeeded
- *   ↓
- * assinatura HMAC
- *   ↓
- * event_id único
- *   ↓
- * localizar order
- *   ↓
- * validar payment.id
- *   ↓
- * validar reference
- *   ↓
- * validar amountMzn
- *   ↓
- * status = PAID
- *   ↓
- * orders.status = PAYMENT_CONFIRMED
- *
  * IMPORTANTE:
- * - Nunca confiar no frontend para confirmar pagamento.
- * - PENDING / PROCESSING não confirmam pagamento.
+ * - Somente backend.
+ * - Assinatura HMAC obrigatória.
+ * - event_id único.
+ * - O corpo bruto é usado na assinatura.
  * - Somente payment.succeeded + PAID confirma.
- * - O webhook pode ser repetido.
- * - event_id impede processamento duplicado.
+ * - PENDING / PROCESSING NÃO confirmam.
+ * - Evento + alteração do pedido são tratados
+ *   atomicamente quando há alteração de estado.
  * =========================================================
  */
 
-
-/* =========================================================
-   JSON
-========================================================= */
-
 function json(res, status, data) {
-
   res.setHeader(
     "Content-Type",
     "application/json"
   );
 
-  return res
-    .status(status)
-    .json(data);
+  return res.status(status).json(data);
 }
-
 
 /* =========================================================
    RAW BODY
 ========================================================= */
 
-function getRawBody(req) {
-
+async function getRawBody(req) {
   if (Buffer.isBuffer(req.body)) {
     return req.body.toString("utf8");
   }
@@ -70,27 +41,36 @@ function getRawBody(req) {
   }
 
   /*
-   * Fallback para ambientes onde o body
-   * já foi convertido para objeto.
-   *
-   * O ideal para HMAC é receber o body bruto.
+   * Se chegarmos aqui, o body já foi convertido.
+   * A assinatura ideal exige o corpo bruto.
    */
+  if (req.body && typeof req.body === "object") {
+    return JSON.stringify(req.body);
+  }
 
-  return JSON.stringify(
-    req.body || {}
-  );
+  const chunks = [];
+
+  for await (const chunk of req) {
+    chunks.push(
+      Buffer.isBuffer(chunk)
+        ? chunk
+        : Buffer.from(chunk)
+    );
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
 }
-
 
 /* =========================================================
    HEADER
 ========================================================= */
 
 function getHeader(req, name) {
+  const lower = name.toLowerCase();
 
   const value =
+    req.headers[lower] ??
     req.headers[name] ??
-    req.headers[name.toLowerCase()] ??
     req.headers[name.toUpperCase()];
 
   if (Array.isArray(value)) {
@@ -100,21 +80,15 @@ function getHeader(req, name) {
   return value;
 }
 
-
 /* =========================================================
-   ASSINATURA WEBHOOK
+   VERIFICAR WEBHOOK
 ========================================================= */
 
-function verifyWebhook(
-  req,
-  rawBody
-) {
-
+function verifyWebhook(req, rawBody) {
   const secret =
     process.env.PAGAR_WEBHOOK_SECRET;
 
   if (!secret) {
-
     return {
       ok: false,
       status: 500,
@@ -123,13 +97,11 @@ function verifyWebhook(
     };
   }
 
-
   const eventId =
     getHeader(
       req,
       "pagar-event-id"
     );
-
 
   const signatureHeader =
     getHeader(
@@ -137,9 +109,7 @@ function verifyWebhook(
       "pagar-signature"
     ) || "";
 
-
   if (!eventId) {
-
     return {
       ok: false,
       status: 400,
@@ -148,13 +118,6 @@ function verifyWebhook(
     };
   }
 
-
-  /*
-   * Formato:
-   *
-   * t=timestamp,v1=signature
-   */
-
   const parts = {};
 
   for (
@@ -162,7 +125,6 @@ function verifyWebhook(
       signatureHeader
     ).split(",")
   ) {
-
     const index =
       item.indexOf("=");
 
@@ -180,23 +142,16 @@ function verifyWebhook(
         .slice(index + 1)
         .trim();
 
-    parts[key] =
-      value;
+    parts[key] = value;
   }
 
-
-  const timestamp =
-    parts.t;
-
-  const receivedSignature =
-    parts.v1;
-
+  const timestamp = parts.t;
+  const receivedSignature = parts.v1;
 
   if (
     !timestamp ||
     !receivedSignature
   ) {
-
     return {
       ok: false,
       status: 401,
@@ -205,11 +160,7 @@ function verifyWebhook(
     };
   }
 
-
-  if (
-    !/^\d+$/.test(timestamp)
-  ) {
-
+  if (!/^\d+$/.test(timestamp)) {
     return {
       ok: false,
       status: 401,
@@ -218,13 +169,11 @@ function verifyWebhook(
     };
   }
 
-
   if (
     !/^[a-f0-9]{64}$/i.test(
       receivedSignature
     )
   ) {
-
     return {
       ok: false,
       status: 401,
@@ -232,13 +181,6 @@ function verifyWebhook(
         "Formato de assinatura inválido."
     };
   }
-
-
-  /*
-   * Proteção contra replay.
-   *
-   * Aceita somente os últimos 5 minutos.
-   */
 
   const timestampSeconds =
     Number(timestamp) / 1000;
@@ -249,12 +191,10 @@ function verifyWebhook(
       timestampSeconds
     );
 
-
   if (
     !Number.isFinite(age) ||
     age > 300
   ) {
-
     return {
       ok: false,
       status: 401,
@@ -263,16 +203,14 @@ function verifyWebhook(
     };
   }
 
-
   /*
-   * Assinatura oficial:
+   * Assinatura Pagar:
    *
    * timestamp + "." + rawBody
    */
 
   const signedPayload =
     `${timestamp}.${rawBody}`;
-
 
   const expectedSignature =
     crypto
@@ -286,13 +224,11 @@ function verifyWebhook(
       )
       .digest("hex");
 
-
   const received =
     Buffer.from(
       receivedSignature,
       "hex"
     );
-
 
   const expected =
     Buffer.from(
@@ -300,12 +236,10 @@ function verifyWebhook(
       "hex"
     );
 
-
   if (
     received.length !==
     expected.length
   ) {
-
     return {
       ok: false,
       status: 401,
@@ -313,7 +247,6 @@ function verifyWebhook(
         "Assinatura inválida."
     };
   }
-
 
   if (
     !crypto.timingSafeEqual(
@@ -321,7 +254,6 @@ function verifyWebhook(
       expected
     )
   ) {
-
     return {
       ok: false,
       status: 401,
@@ -330,39 +262,17 @@ function verifyWebhook(
     };
   }
 
-
   return {
-
     ok: true,
-
-    eventId:
-      String(eventId)
-
+    eventId: String(eventId)
   };
 }
-
-
-/* =========================================================
-   EXTRAIR PAYMENT
-========================================================= */
-
-function getPayment(event) {
-
-  return (
-    event?.payment ||
-    event?.data?.payment ||
-    event?.data ||
-    {}
-  );
-}
-
 
 /* =========================================================
    EVENT TYPE
 ========================================================= */
 
 function getEventType(event) {
-
   return String(
     event?.type ||
     event?.event ||
@@ -372,90 +282,72 @@ function getEventType(event) {
     .toLowerCase();
 }
 
+/* =========================================================
+   PAYMENT
+========================================================= */
+
+function getPayment(event) {
+  return (
+    event?.payment ||
+    event?.data?.payment ||
+    event?.data ||
+    {}
+  );
+}
 
 /* =========================================================
    HANDLER
 ========================================================= */
 
-export default async function handler(
-  req,
-  res
-) {
-
-  /* -------------------------------------------------------
-     SOMENTE POST
-  ------------------------------------------------------- */
-
-  if (
-    req.method !== "POST"
-  ) {
-
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
     res.setHeader(
       "Allow",
       "POST"
     );
 
-    return json(
-      res,
-      405,
-      {
-        success: false,
-        error:
-          "Método não permitido."
-      }
-    );
+    return json(res, 405, {
+      success: false,
+      error:
+        "Método não permitido."
+    });
   }
 
-
-  /* -------------------------------------------------------
-     CONFIGURAÇÃO
-  ------------------------------------------------------- */
-
-  if (
-    !process.env.DATABASE_URL
-  ) {
-
-    return json(
-      res,
-      500,
-      {
-        success: false,
-        error:
-          "DATABASE_URL não configurada."
-      }
-    );
+  if (!process.env.DATABASE_URL) {
+    return json(res, 500, {
+      success: false,
+      error:
+        "DATABASE_URL não configurada."
+    });
   }
 
-
-  if (
-    !process.env.PAGAR_WEBHOOK_SECRET
-  ) {
-
-    return json(
-      res,
-      500,
-      {
-        success: false,
-        error:
-          "PAGAR_WEBHOOK_SECRET não configurado."
-      }
-    );
+  if (!process.env.PAGAR_WEBHOOK_SECRET) {
+    return json(res, 500, {
+      success: false,
+      error:
+        "PAGAR_WEBHOOK_SECRET não configurado."
+    });
   }
-
 
   try {
-
-    /* -----------------------------------------------------
+    /* =====================================================
        RAW BODY
-    ----------------------------------------------------- */
+    ===================================================== */
 
     const rawBody =
-      getRawBody(req);
+      await getRawBody(req);
 
+    if (!rawBody) {
+      return json(res, 400, {
+        success: false,
+        error:
+          "Body do webhook vazio."
+      });
+    }
 
-    /* -----------------------------------------------------
-       VALIDAR ASSINATURA
-    ----------------------------------------------------- */
+    /* =====================================================
+       ASSINATURA
+    ===================================================== */
 
     const verification =
       verifyWebhook(
@@ -463,11 +355,7 @@ export default async function handler(
         rawBody
       );
 
-
-    if (
-      !verification.ok
-    ) {
-
+    if (!verification.ok) {
       return json(
         res,
         verification.status,
@@ -479,159 +367,88 @@ export default async function handler(
       );
     }
 
-
     const eventId =
       verification.eventId;
 
-
-    /* -----------------------------------------------------
-       PARSE JSON
-    ----------------------------------------------------- */
+    /* =====================================================
+       JSON
+    ===================================================== */
 
     let event;
 
     try {
-
       event =
-        JSON.parse(
-          rawBody
-        );
-
+        JSON.parse(rawBody);
     } catch {
-
-      return json(
-        res,
-        400,
-        {
-          success: false,
-          error:
-            "JSON do webhook inválido."
-        }
-      );
+      return json(res, 400, {
+        success: false,
+        error:
+          "JSON do webhook inválido."
+      });
     }
 
-
-    /* -----------------------------------------------------
-       EVENT TYPE
-    ----------------------------------------------------- */
+    /* =====================================================
+       EVENTO
+    ===================================================== */
 
     const eventType =
       getEventType(event);
 
-
-    /* -----------------------------------------------------
-       PAYMENT
-    ----------------------------------------------------- */
-
     const payment =
       getPayment(event);
 
-
     const paymentId =
       payment?.id
-        ? String(
-            payment.id
-          )
+        ? String(payment.id)
         : null;
-
 
     const reference =
       payment?.reference
-        ? String(
-            payment.reference
-          )
+        ? String(payment.reference)
         : null;
-
 
     const paymentStatus =
       String(
-        payment?.status ||
-        ""
+        payment?.status || ""
       )
         .trim()
         .toUpperCase();
-
 
     const amountMzn =
       Number(
         payment?.amountMzn
       );
 
-
-    /* -----------------------------------------------------
+    /* =====================================================
        DATABASE
-    ----------------------------------------------------- */
+    ===================================================== */
 
     const sql =
       neon(
         process.env.DATABASE_URL
       );
 
-
     /* =====================================================
-       REGISTAR EVENTO
+       EVENTO JÁ EXISTE?
     ===================================================== */
 
-    const inserted =
+    const existing =
       await sql`
-
-        INSERT INTO pagar_webhook_events (
-
-          event_id,
-          event_type,
-          payment_id,
-          reference,
-          payload,
-          created_at,
-          processed_at
-
-        )
-
-        VALUES (
-
-          ${eventId},
-          ${eventType || null},
-          ${paymentId},
-          ${reference},
-          ${JSON.stringify(event)}::jsonb,
-          NOW(),
-          NULL
-
-        )
-
-        ON CONFLICT (
-          event_id
-        )
-
-        DO NOTHING
-
-        RETURNING
+        SELECT
           id,
-          event_id
-
+          processed_at
+        FROM pagar_webhook_events
+        WHERE event_id = ${eventId}
+        LIMIT 1
       `;
 
-
-    /* -----------------------------------------------------
-       DUPLICADO
-    ----------------------------------------------------- */
-
-    if (
-      inserted.length === 0
-    ) {
-
-      return json(
-        res,
-        200,
-        {
-          success: true,
-          duplicate: true,
-          event_id:
-            eventId
-        }
-      );
+    if (existing.length > 0) {
+      return json(res, 200, {
+        success: true,
+        duplicate: true,
+        event_id: eventId
+      });
     }
-
 
     /* =====================================================
        EVENTO NÃO É PAYMENT
@@ -642,36 +459,37 @@ export default async function handler(
         "payment."
       )
     ) {
-
       await sql`
-
-        UPDATE pagar_webhook_events
-
-        SET
-          processed_at =
-            NOW()
-
-        WHERE event_id =
-          ${eventId}
-
+        INSERT INTO pagar_webhook_events (
+          event_id,
+          event_type,
+          payment_id,
+          reference,
+          payload,
+          processed_at,
+          created_at
+        )
+        VALUES (
+          ${eventId},
+          ${eventType || null},
+          ${paymentId},
+          ${reference},
+          ${JSON.stringify(event)}::jsonb,
+          NOW(),
+          NOW()
+        )
+        ON CONFLICT (event_id)
+        DO NOTHING
       `;
 
-
-      return json(
-        res,
-        200,
-        {
-          success: true,
-          ignored: true,
-          event:
-            eventType ||
-            null,
-          event_id:
-            eventId
-        }
-      );
+      return json(res, 200, {
+        success: true,
+        ignored: true,
+        event:
+          eventType || null,
+        event_id: eventId
+      });
     }
-
 
     /* =====================================================
        IDENTIFICADORES
@@ -681,18 +499,12 @@ export default async function handler(
       !paymentId &&
       !reference
     ) {
-
-      return json(
-        res,
-        400,
-        {
-          success: false,
-          error:
-            "Pagamento sem ID ou reference."
-        }
-      );
+      return json(res, 400, {
+        success: false,
+        error:
+          "Pagamento sem ID ou reference."
+      });
     }
-
 
     /* =====================================================
        LOCALIZAR PEDIDO
@@ -700,18 +512,10 @@ export default async function handler(
 
     let orders = [];
 
-
-    /*
-     * Primeiro pela reference.
-     */
-
     if (reference) {
-
       orders =
         await sql`
-
           SELECT
-
             id,
             order_id,
             status,
@@ -719,35 +523,20 @@ export default async function handler(
             usdt_amount,
             rate,
             payment,
-            pagar_payment_id,
-            blockchain_tx_hash,
-            wallet_address
-
+            pagar_payment_id
           FROM orders
-
-          WHERE order_id =
-            ${reference}
-
+          WHERE order_id = ${reference}
           LIMIT 1
-
         `;
     }
-
-
-    /*
-     * Depois pelo payment ID.
-     */
 
     if (
       orders.length === 0 &&
       paymentId
     ) {
-
       orders =
         await sql`
-
           SELECT
-
             id,
             order_id,
             status,
@@ -755,42 +544,40 @@ export default async function handler(
             usdt_amount,
             rate,
             payment,
-            pagar_payment_id,
-            blockchain_tx_hash,
-            wallet_address
-
+            pagar_payment_id
           FROM orders
-
-          WHERE pagar_payment_id =
-            ${paymentId}
-
+          WHERE pagar_payment_id = ${paymentId}
           LIMIT 1
-
         `;
     }
-
 
     /* =====================================================
        PEDIDO NÃO ENCONTRADO
     ===================================================== */
 
-    if (
-      orders.length === 0
-    ) {
-
+    if (orders.length === 0) {
       await sql`
-
-        UPDATE pagar_webhook_events
-
-        SET
-          processed_at =
-            NOW()
-
-        WHERE event_id =
-          ${eventId}
-
+        INSERT INTO pagar_webhook_events (
+          event_id,
+          event_type,
+          payment_id,
+          reference,
+          payload,
+          processed_at,
+          created_at
+        )
+        VALUES (
+          ${eventId},
+          ${eventType || null},
+          ${paymentId},
+          ${reference},
+          ${JSON.stringify(event)}::jsonb,
+          NOW(),
+          NOW()
+        )
+        ON CONFLICT (event_id)
+        DO NOTHING
       `;
-
 
       console.error(
         "USDTMZ WEBHOOK: pedido não encontrado",
@@ -802,23 +589,15 @@ export default async function handler(
         }
       );
 
-
-      return json(
-        res,
-        200,
-        {
-          success: true,
-          orderFound: false,
-          event_id:
-            eventId
-        }
-      );
+      return json(res, 200, {
+        success: true,
+        orderFound: false,
+        event_id: eventId
+      });
     }
-
 
     const order =
       orders[0];
-
 
     /* =====================================================
        VALIDAR PAYMENT ID
@@ -831,31 +610,12 @@ export default async function handler(
         order.pagar_payment_id
       ) !== paymentId
     ) {
-
-      console.error(
-        "USDTMZ WEBHOOK: payment ID incompatível",
-        {
-          orderId:
-            order.order_id,
-          expected:
-            order.pagar_payment_id,
-          received:
-            paymentId
-        }
-      );
-
-
-      return json(
-        res,
-        409,
-        {
-          success: false,
-          error:
-            "payment.id não corresponde ao pedido."
-        }
-      );
+      return json(res, 409, {
+        success: false,
+        error:
+          "payment.id não corresponde ao pedido."
+      });
     }
-
 
     /* =====================================================
        VALIDAR REFERENCE
@@ -867,52 +627,36 @@ export default async function handler(
         order.order_id
       ) !== reference
     ) {
-
-      return json(
-        res,
-        409,
-        {
-          success: false,
-          error:
-            "Reference não corresponde ao pedido."
-        }
-      );
+      return json(res, 409, {
+        success: false,
+        error:
+          "Reference não corresponde ao pedido."
+      });
     }
-
 
     /* =====================================================
        VALIDAR VALOR
     ===================================================== */
 
     const orderAmount =
-      Number(
-        order.amount
-      );
-
+      Number(order.amount);
 
     if (
       !Number.isFinite(
         amountMzn
       )
     ) {
-
-      return json(
-        res,
-        400,
-        {
-          success: false,
-          error:
-            "Pagamento sem amountMzn válido."
-        }
-      );
+      return json(res, 400, {
+        success: false,
+        error:
+          "Pagamento sem amountMzn válido."
+      });
     }
-
 
     if (
       amountMzn !==
       orderAmount
     ) {
-
       console.error(
         "USDTMZ WEBHOOK: valor incompatível",
         {
@@ -925,219 +669,155 @@ export default async function handler(
         }
       );
 
-
-      return json(
-        res,
-        409,
-        {
-          success: false,
-          error:
-            "O valor pago não corresponde ao valor do pedido."
-        }
-      );
+      return json(res, 409, {
+        success: false,
+        error:
+          "O valor pago não corresponde ao valor do pedido."
+      });
     }
 
-
     /* =====================================================
-       PAYMENT SUCCEEDED + PAID
+       CONFIRMAÇÃO
     ===================================================== */
 
     const confirmed =
       eventType ===
         "payment.succeeded" &&
-      paymentStatus ===
-        "PAID";
-
+      paymentStatus === "PAID";
 
     if (confirmed) {
+      /*
+       * Evento + confirmação do pedido
+       * na mesma transação.
+       */
 
-      /* ---------------------------------------------------
-         JÁ PROCESSADO
-      --------------------------------------------------- */
+      const [
+        eventInsert,
+        orderUpdate
+      ] = await sql.transaction([
+        sql`
+          INSERT INTO pagar_webhook_events (
+            event_id,
+            event_type,
+            payment_id,
+            reference,
+            payload,
+            processed_at,
+            created_at
+          )
+          VALUES (
+            ${eventId},
+            ${eventType},
+            ${paymentId},
+            ${reference},
+            ${JSON.stringify(event)}::jsonb,
+            NOW(),
+            NOW()
+          )
+          ON CONFLICT (event_id)
+          DO NOTHING
+          RETURNING
+            id,
+            event_id
+        `,
 
-      if (
-        [
-          "PAYMENT_CONFIRMED",
-          "USDT_SENT",
-          "COMPLETED"
-        ].includes(
-          String(
-            order.status
-          ).toUpperCase()
-        )
-      ) {
-
-        await sql`
-
-          UPDATE pagar_webhook_events
-
-          SET
-            processed_at =
-              NOW()
-
-          WHERE event_id =
-            ${eventId}
-
-        `;
-
-
-        return json(
-          res,
-          200,
-          {
-            success: true,
-            alreadyProcessed: true,
-            order_id:
-              order.order_id,
-            status:
-              order.status
-          }
-        );
-      }
-
-
-      /* ---------------------------------------------------
-         CONFIRMAR PAGAMENTO
-      --------------------------------------------------- */
-
-      const updated =
-        await sql`
-
+        sql`
           UPDATE orders
-
           SET
-
-            status =
-              'PAYMENT_CONFIRMED',
-
+            status = 'PAYMENT_CONFIRMED',
             pagar_payment_id =
               COALESCE(
                 pagar_payment_id,
                 ${paymentId}
               ),
-
-            updated_at =
-              NOW()
-
-          WHERE id =
-            ${order.id}
-
+            pagar_event_id =
+              ${eventId},
+            updated_at = NOW()
+          WHERE id = ${order.id}
           AND status NOT IN (
+            'PAYMENT_CONFIRMED',
             'USDT_SENT',
             'COMPLETED'
           )
-
           RETURNING
-
             order_id,
             status,
             amount,
             usdt_amount,
             rate,
             pagar_payment_id
+        `
+      ]);
 
-        `;
+      /*
+       * Outro pedido/processo já inseriu
+       * este evento.
+       */
 
+      if (
+        eventInsert.length === 0
+      ) {
+        return json(res, 200, {
+          success: true,
+          duplicate: true,
+          event_id: eventId
+        });
+      }
 
       const confirmedOrder =
-        updated[0];
+        orderUpdate[0];
 
+      return json(res, 200, {
+        success: true,
+        confirmed: true,
 
-      /* ---------------------------------------------------
-         MARCAR EVENTO PROCESSADO
-      --------------------------------------------------- */
+        order: {
+          order_id:
+            confirmedOrder?.order_id ||
+            order.order_id,
 
-      await sql`
+          status:
+            confirmedOrder?.status ||
+            order.status,
 
-        UPDATE pagar_webhook_events
+          amountMzn:
+            Number(
+              confirmedOrder?.amount ??
+              order.amount
+            ),
 
-        SET
+          usdt_amount:
+            confirmedOrder?.usdt_amount ??
+            order.usdt_amount,
 
-          processed_at =
-            NOW()
+          rate:
+            confirmedOrder?.rate ??
+            order.rate
+        },
 
-        WHERE event_id =
-          ${eventId}
-
-      `;
-
-
-      /* ---------------------------------------------------
-         RESPOSTA
-      --------------------------------------------------- */
-
-      return json(
-        res,
-        200,
-        {
-          success: true,
-
-          confirmed: true,
-
-          order: {
-
-            order_id:
-              confirmedOrder?.order_id ||
-              order.order_id,
-
-            status:
-              confirmedOrder?.status ||
-              "PAYMENT_CONFIRMED",
-
-            amountMzn:
-              Number(
-                confirmedOrder?.amount ||
-                order.amount
-              ),
-
-            usdt_amount:
-              confirmedOrder?.usdt_amount ||
-              order.usdt_amount,
-
-            rate:
-              confirmedOrder?.rate ||
-              order.rate
-
-          },
-
-          payment: {
-
-            id:
-              paymentId,
-
-            status:
-              paymentStatus,
-
-            reference,
-
-            amountMzn,
-
-            currency:
-              payment?.currency ||
-              "MZN",
-
-            method:
-              payment?.method ||
-              null,
-
-            providerTransactionId:
-              payment?.providerTransactionId ||
-              null,
-
-            paidAt:
-              payment?.paidAt ||
-              null,
-
-            receipt:
-              payment?.receipt ||
-              null
-
-          }
-
+        payment: {
+          id: paymentId,
+          status: paymentStatus,
+          reference,
+          amountMzn,
+          currency:
+            payment?.currency ||
+            "MZN",
+          method:
+            payment?.method ||
+            null,
+          providerTransactionId:
+            payment?.providerTransactionId ||
+            null,
+          paidAt:
+            payment?.paidAt ||
+            null,
+          receipt:
+            payment?.receipt ||
+            null
         }
-      );
+      });
     }
-
 
     /* =====================================================
        PAYMENT FAILED
@@ -1147,18 +827,10 @@ export default async function handler(
       eventType ===
       "payment.failed"
     ) {
-
       const currentStatus =
         String(
-          order.status ||
-          ""
+          order.status || ""
         ).toUpperCase();
-
-
-      /*
-       * Nunca transformar pagamento confirmado
-       * em FAILED.
-       */
 
       if (
         [
@@ -1169,187 +841,198 @@ export default async function handler(
           currentStatus
         )
       ) {
-
         await sql`
-
-          UPDATE pagar_webhook_events
-
-          SET
-            processed_at =
-              NOW()
-
-          WHERE event_id =
-            ${eventId}
-
+          INSERT INTO pagar_webhook_events (
+            event_id,
+            event_type,
+            payment_id,
+            reference,
+            payload,
+            processed_at,
+            created_at
+          )
+          VALUES (
+            ${eventId},
+            ${eventType},
+            ${paymentId},
+            ${reference},
+            ${JSON.stringify(event)}::jsonb,
+            NOW(),
+            NOW()
+          )
+          ON CONFLICT (event_id)
+          DO NOTHING
         `;
 
-
-        return json(
-          res,
-          200,
-          {
-            success: true,
-            ignored: true,
-            order_id:
-              order.order_id,
-            status:
-              order.status
-          }
-        );
+        return json(res, 200, {
+          success: true,
+          ignored: true,
+          order_id:
+            order.order_id,
+          status:
+            order.status
+        });
       }
 
-
-      await sql`
-
-        UPDATE orders
-
-        SET
-
-          status =
-            'FAILED',
-
-          pagar_payment_id =
-            COALESCE(
-              pagar_payment_id,
-              ${paymentId}
-            ),
-
-          updated_at =
+      const [
+        eventInsert,
+        orderUpdate
+      ] = await sql.transaction([
+        sql`
+          INSERT INTO pagar_webhook_events (
+            event_id,
+            event_type,
+            payment_id,
+            reference,
+            payload,
+            processed_at,
+            created_at
+          )
+          VALUES (
+            ${eventId},
+            ${eventType},
+            ${paymentId},
+            ${reference},
+            ${JSON.stringify(event)}::jsonb,
+            NOW(),
             NOW()
+          )
+          ON CONFLICT (event_id)
+          DO NOTHING
+          RETURNING
+            id,
+            event_id
+        `,
 
-        WHERE id =
-          ${order.id}
+        sql`
+          UPDATE orders
+          SET
+            status = 'FAILED',
+            pagar_payment_id =
+              COALESCE(
+                pagar_payment_id,
+                ${paymentId}
+              ),
+            pagar_event_id =
+              ${eventId},
+            updated_at = NOW()
+          WHERE id = ${order.id}
+          AND status NOT IN (
+            'PAYMENT_CONFIRMED',
+            'USDT_SENT',
+            'COMPLETED'
+          )
+          RETURNING
+            order_id,
+            status
+        `
+      ]);
 
-      `;
-
-
-      await sql`
-
-        UPDATE pagar_webhook_events
-
-        SET
-
-          processed_at =
-            NOW()
-
-        WHERE event_id =
-          ${eventId}
-
-      `;
-
-
-      return json(
-        res,
-        200,
-        {
+      if (
+        eventInsert.length === 0
+      ) {
+        return json(res, 200, {
           success: true,
+          duplicate: true,
+          event_id: eventId
+        });
+      }
 
-          confirmed: false,
+      return json(res, 200, {
+        success: true,
+        confirmed: false,
 
-          order: {
+        order: {
+          order_id:
+            orderUpdate[0]?.order_id ||
+            order.order_id,
 
-            order_id:
-              order.order_id,
+          status:
+            orderUpdate[0]?.status ||
+            "FAILED"
+        },
 
-            status:
-              "FAILED"
-
-          },
-
-          payment: {
-
-            id:
-              paymentId,
-
-            status:
-              paymentStatus,
-
-            failureReason:
-              payment?.failureReason ||
-              null
-
-          }
-
+        payment: {
+          id: paymentId,
+          status: paymentStatus,
+          failureReason:
+            payment?.failureReason ||
+            null
         }
-      );
+      });
     }
-
 
     /* =====================================================
        PENDING / PROCESSING / OUTROS
     ===================================================== */
 
     await sql`
-
-      UPDATE pagar_webhook_events
-
-      SET
-
-        processed_at =
-          NOW()
-
-      WHERE event_id =
-        ${eventId}
-
+      INSERT INTO pagar_webhook_events (
+        event_id,
+        event_type,
+        payment_id,
+        reference,
+        payload,
+        processed_at,
+        created_at
+      )
+      VALUES (
+        ${eventId},
+        ${eventType || null},
+        ${paymentId},
+        ${reference},
+        ${JSON.stringify(event)}::jsonb,
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (event_id)
+      DO NOTHING
     `;
 
+    return json(res, 200, {
+      success: true,
+      confirmed: false,
+      pending: true,
 
-    return json(
-      res,
-      200,
-      {
-        success: true,
+      order: {
+        order_id:
+          order.order_id,
+        status:
+          order.status
+      },
 
-        confirmed: false,
-
-        pending: true,
-
-        order: {
-
-          order_id:
-            order.order_id,
-
-          status:
-            order.status
-
-        },
-
-        payment: {
-
-          id:
-            paymentId,
-
-          status:
-            paymentStatus ||
-            "PENDING",
-
-          reference,
-
-          amountMzn
-
-        }
-
+      payment: {
+        id: paymentId,
+        status:
+          paymentStatus ||
+          "PENDING",
+        reference,
+        amountMzn
       }
-    );
-
+    });
 
   } catch (error) {
-
     console.error(
       "USDTMZ PAGAR WEBHOOK ERROR:",
       error?.message ||
       error
     );
 
-
-    return json(
-      res,
-      500,
-      {
-        success: false,
-        error:
-          "Erro interno ao processar webhook."
-      }
-    );
+    return json(res, 500, {
+      success: false,
+      error:
+        "Erro interno ao processar webhook."
+    });
   }
 }
+
+/*
+ * Vercel:
+ * precisamos do corpo bruto para verificar
+ * corretamente a assinatura HMAC.
+ */
+export const config = {
+  api: {
+    bodyParser: false
+  }
+};
