@@ -1,11 +1,5 @@
-const USDT_CONTRACT =
-  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
-
-const USDT_DECIMALS = 6;
 const TRON_HOST = "https://api.trongrid.io";
-
-const WALLET_ADDRESS =
-  "TVSGrUA6foo527kWL5NiTFBmMX9F38F8A4";
+const USDT_DECIMALS = 6;
 
 function isValidTronAddress(address) {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
@@ -37,32 +31,57 @@ export default async function handler(req, res) {
   }
 
   try {
-    if (!isValidTronAddress(WALLET_ADDRESS)) {
+    const walletAddress =
+      process.env.TRON_WALLET_ADDRESS;
+
+    const usdtContract =
+      process.env.USDT_CONTRACT_ADDRESS ||
+      "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+
+    const apiKey =
+      process.env.TRONGRID_API_KEY;
+
+    if (!walletAddress) {
+      return res.status(500).json({
+        success: false,
+        error:
+          "TRON_WALLET_ADDRESS não configurada no Vercel."
+      });
+    }
+
+    if (!isValidTronAddress(walletAddress)) {
       return res.status(400).json({
         success: false,
         error: "Endereço TRON configurado é inválido."
       });
     }
 
-    const apiKey = process.env.TRONGRID_API_KEY;
+    if (!isValidTronAddress(usdtContract)) {
+      return res.status(400).json({
+        success: false,
+        error: "Contrato USDT configurado é inválido."
+      });
+    }
 
     if (!apiKey) {
       return res.status(500).json({
         success: false,
-        error: "TRONGRID_API_KEY não configurada no Vercel."
+        error:
+          "TRONGRID_API_KEY não configurada no Vercel."
       });
     }
 
     const url =
-  `${TRON_HOST}/v1/accounts/${WALLET_ADDRESS}/trc20/balance` +
-  `?contract_address=${USDT_CONTRACT}`;
+      `${TRON_HOST}/v1/accounts/${walletAddress}/trc20/balance` +
+      `?contract_address=${usdtContract}`;
 
     const response = await fetch(url, {
       method: "GET",
       headers: {
         "TRON-PRO-API-KEY": apiKey,
         "Accept": "application/json"
-      }
+      },
+      cache: "no-store"
     });
 
     let data;
@@ -72,7 +91,8 @@ export default async function handler(req, res) {
     } catch {
       return res.status(502).json({
         success: false,
-        error: "Resposta inválida recebida da TRONGrid."
+        error:
+          "Resposta inválida recebida da TRONGrid."
       });
     }
 
@@ -86,9 +106,7 @@ export default async function handler(req, res) {
       return res.status(502).json({
         success: false,
         error:
-          "TRONGrid HTTP " +
-          response.status +
-          ": " +
+          `TRONGrid HTTP ${response.status}: ` +
           String(
             data?.Error ||
             data?.error ||
@@ -112,7 +130,7 @@ export default async function handler(req, res) {
 
       return (
         contract ===
-        USDT_CONTRACT.toLowerCase()
+        usdtContract.toLowerCase()
       );
     });
 
@@ -126,11 +144,11 @@ export default async function handler(req, res) {
       success: true,
 
       wallet: {
-        address: WALLET_ADDRESS,
+        address: walletAddress,
         network: "TRON Mainnet",
         asset: "USDT",
         standard: "TRC-20",
-        contract: USDT_CONTRACT,
+        contract: usdtContract,
 
         configured: true,
         connected: true,
