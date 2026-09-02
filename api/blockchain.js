@@ -1,12 +1,6 @@
 const TRON_API = "https://api.trongrid.io";
 
-const USDT_CONTRACT =
-  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
-
 const USDT_DECIMALS = 6;
-
-const WALLET_ADDRESS =
-  "TVSGrUA6foo527kWL5NiTFBmMX9F38F8A4";
 
 function isValidTronAddress(address) {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
@@ -15,14 +9,13 @@ function isValidTronAddress(address) {
 function formatUsdtBalance(rawBalance) {
   try {
     const raw = BigInt(String(rawBalance || "0"));
-    const divisor = 1000000n;
+    const divisor = 10n ** BigInt(USDT_DECIMALS);
 
     const whole = raw / divisor;
 
-    const decimal =
-      (raw % divisor)
-        .toString()
-        .padStart(USDT_DECIMALS, "0");
+    const decimal = (raw % divisor)
+      .toString()
+      .padStart(USDT_DECIMALS, "0");
 
     return `${whole}.${decimal}`;
   } catch {
@@ -39,26 +32,49 @@ export default async function handler(req, res) {
   }
 
   try {
-    if (!isValidTronAddress(WALLET_ADDRESS)) {
+    const walletAddress =
+      process.env.TRON_WALLET_ADDRESS;
+
+    const usdtContract =
+      process.env.USDT_CONTRACT_ADDRESS ||
+      "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+
+    const apiKey =
+      process.env.TRONGRID_API_KEY;
+
+    if (!walletAddress) {
+      return res.status(500).json({
+        success: false,
+        error:
+          "TRON_WALLET_ADDRESS não configurada no Vercel."
+      });
+    }
+
+    if (!isValidTronAddress(walletAddress)) {
       return res.status(400).json({
         success: false,
         error: "Endereço TRON inválido."
       });
     }
 
-    const apiKey =
-      process.env.TRONGRID_API_KEY;
+    if (!isValidTronAddress(usdtContract)) {
+      return res.status(400).json({
+        success: false,
+        error: "Contrato USDT inválido."
+      });
+    }
 
     if (!apiKey) {
       return res.status(500).json({
         success: false,
-        error: "TRONGRID_API_KEY não configurada."
+        error:
+          "TRONGRID_API_KEY não configurada no Vercel."
       });
     }
 
     const url =
-      `${TRON_API}/v1/accounts/${WALLET_ADDRESS}/trc20/balance` +
-      `?contract_address=${USDT_CONTRACT}`;
+      `${TRON_API}/v1/accounts/${walletAddress}/trc20/balance` +
+      `?contract_address=${usdtContract}`;
 
     const response = await fetch(url, {
       method: "GET",
@@ -69,16 +85,17 @@ export default async function handler(req, res) {
       cache: "no-store"
     });
 
-    const data = await response.json();
+    let data;
 
-    /*
-     * Log seguro para diagnóstico.
-     * Não mostra a API key.
-     */
-    console.log(
-      "TRON RESPONSE:",
-      JSON.stringify(data)
-    );
+    try {
+      data = await response.json();
+    } catch {
+      return res.status(502).json({
+        success: false,
+        error:
+          "Resposta inválida recebida da TRONGrid."
+      });
+    }
 
     if (!response.ok) {
       console.error(
@@ -89,8 +106,8 @@ export default async function handler(req, res) {
 
       return res.status(502).json({
         success: false,
-        error: "TRONGrid rejeitou a consulta.",
-        tronGridStatus: response.status
+        error:
+          `TRONGrid HTTP ${response.status}.`
       });
     }
 
@@ -99,30 +116,19 @@ export default async function handler(req, res) {
         ? data.data
         : [];
 
-    console.log(
-      "TRON TOKENS FOUND:",
-      items.length
-    );
+    const token = items.find((item) => {
+      const contract =
+        String(
+          item?.token_id ||
+          item?.contract_address ||
+          ""
+        ).toLowerCase();
 
-    const token =
-      items.find((item) => {
-        const contract =
-          String(
-            item?.token_id ||
-            item?.contract_address ||
-            ""
-          ).toLowerCase();
-
-        return (
-          contract ===
-          USDT_CONTRACT.toLowerCase()
-        );
-      }) || null;
-
-    console.log(
-      "USDT TOKEN FOUND:",
-      Boolean(token)
-    );
+      return (
+        contract ===
+        usdtContract.toLowerCase()
+      );
+    });
 
     const rawBalance =
       String(token?.balance || "0");
@@ -130,27 +136,18 @@ export default async function handler(req, res) {
     const balance =
       formatUsdtBalance(rawBalance);
 
-    console.log(
-      "USDT BALANCE:",
-      balance
-    );
-
     return res.status(200).json({
       success: true,
-
       wallet: {
-        address: WALLET_ADDRESS,
+        address: walletAddress,
         network: "TRON Mainnet",
         asset: "USDT",
         standard: "TRC-20",
-        contract: USDT_CONTRACT,
-
+        contract: usdtContract,
         connected: true,
         configured: true,
-
         balance,
         balanceRaw: rawBalance,
-
         confirmed: true,
         source: "TRONGrid"
       }
@@ -164,7 +161,8 @@ export default async function handler(req, res) {
 
     return res.status(500).json({
       success: false,
-      error: "Erro interno ao consultar a blockchain."
+      error:
+        "Erro interno ao consultar a blockchain."
     });
   }
 }
