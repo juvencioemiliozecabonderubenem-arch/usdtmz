@@ -6,13 +6,13 @@ import crypto from "node:crypto";
  * USDTMZ — PAGAR WEBHOOK
  * POST /api/pagar-webhook
  *
- * TEST / PRODUÇÃO
- *
  * Fluxo:
  *
  * Pagar
  *   ↓
  * POST /api/pagar-webhook
+ *   ↓
+ * valida headers
  *   ↓
  * valida assinatura HMAC
  *   ↓
@@ -27,15 +27,19 @@ import crypto from "node:crypto";
  * PAYMENT_CONFIRMED
  *
  * IMPORTANTE:
- * - Não confirmar pagamento pelo frontend.
- * - Não confiar no status enviado pelo frontend.
- * - O corpo bruto é usado na assinatura.
+ * - O frontend nunca confirma pagamento.
+ * - O body bruto é usado na assinatura.
  * - event_id é único.
  * - Somente payment.succeeded + PAID confirma.
  * - PENDING / PROCESSING não confirmam.
- * - Os secrets ficam somente nas Environment Variables.
+ * - Secrets ficam somente nas Environment Variables.
  * =========================================================
  */
+
+
+/* =========================================================
+ * RESPOSTA JSON
+ * ========================================================= */
 
 function json(res, status, data) {
   res.setHeader(
@@ -46,20 +50,48 @@ function json(res, status, data) {
   return res.status(status).json(data);
 }
 
+
+/* =========================================================
+ * HEADER
+ * ========================================================= */
+
 function getHeader(req, name) {
-  const lower = name.toLowerCase();
+  const wanted =
+    name.toLowerCase();
 
-  const value =
-    req.headers?.[lower] ??
-    req.headers?.[name] ??
-    req.headers?.[name.toUpperCase()];
+  const headers =
+    req.headers || {};
 
-  if (Array.isArray(value)) {
-    return value[0];
+  const key =
+    Object.keys(headers).find(
+      (k) =>
+        k.toLowerCase() === wanted
+    );
+
+  if (!key) {
+    return null;
   }
 
-  return value;
+  const value =
+    headers[key];
+
+  if (Array.isArray(value)) {
+    return value[0] || null;
+  }
+
+  return value
+    ? String(value)
+    : null;
 }
+
+
+/* =========================================================
+ * BODY BRUTO
+ *
+ * IMPORTANTE:
+ * A assinatura HMAC precisa do body exatamente como
+ * foi recebido.
+ * ========================================================= */
 
 async function getRawBody(req) {
   const chunks = [];
@@ -68,47 +100,108 @@ async function getRawBody(req) {
     if (Buffer.isBuffer(chunk)) {
       chunks.push(chunk);
     } else {
-      chunks.push(Buffer.from(chunk));
+      chunks.push(
+        Buffer.from(chunk)
+      );
     }
   }
 
-  return Buffer.concat(chunks).toString("utf8");
+  return Buffer
+    .concat(chunks)
+    .toString("utf8");
 }
 
-function safeCompareHex(receivedHex, expectedHex) {
+
+/* =========================================================
+ * COMPARAÇÃO SEGURA DE HASH
+ * ========================================================= */
+
+function safeCompareHex(
+  received,
+  expected
+) {
   if (
-    typeof receivedHex !== "string" ||
-    typeof expectedHex !== "string"
+    typeof received !== "string" ||
+    typeof expected !== "string"
   ) {
     return false;
   }
 
   if (
-    !/^[a-f0-9]{64}$/i.test(receivedHex) ||
-    !/^[a-f0-9]{64}$/i.test(expectedHex)
+    !/^[a-f0-9]{64}$/i.test(received) ||
+    !/^[a-f0-9]{64}$/i.test(expected)
   ) {
     return false;
   }
 
-  const received =
-    Buffer.from(receivedHex, "hex");
+  const receivedBuffer =
+    Buffer.from(
+      received,
+      "hex"
+    );
 
-  const expected =
-    Buffer.from(expectedHex, "hex");
-
-  if (
-    received.length !== expected.length
-  ) {
-    return false;
-  }
+  const expectedBuffer =
+    Buffer.from(
+      expected,
+      "hex"
+    );
 
   return crypto.timingSafeEqual(
-    received,
-    expected
+    receivedBuffer,
+    expectedBuffer
   );
 }
 
-function verifyWebhook(req, rawBody) {
+
+/* =========================================================
+ * TIMESTAMP
+ *
+ * Aceita:
+ *
+ * 10 dígitos → segundos
+ * 13 dígitos → milissegundos
+ *
+ * Janela: 15 minutos
+ * ========================================================= */
+
+function getTimestampSeconds(
+  timestamp
+) {
+  const number =
+    Number(timestamp);
+
+  if (
+    !Number.isFinite(number)
+  ) {
+    return null;
+  }
+
+  /*
+   * Timestamp de 13 dígitos:
+   * milissegundos
+   */
+  if (
+    number >= 100000000000
+  ) {
+    return number / 1000;
+  }
+
+  /*
+   * Timestamp de 10 dígitos:
+   * segundos
+   */
+  return number;
+}
+
+
+/* =========================================================
+ * VERIFICAÇÃO HMAC
+ * ========================================================= */
+
+function verifyWebhook(
+  req,
+  rawBody
+) {
   const secret =
     process.env.PAGAR_WEBHOOK_SECRET;
 
@@ -124,7 +217,7 @@ function verifyWebhook(req, rawBody) {
   const eventId =
     getHeader(
       req,
-      "pagar-event-id"
+      "Pagar-Event-Id"
     );
 
   if (!eventId) {
@@ -139,7 +232,7 @@ function verifyWebhook(req, rawBody) {
   const signatureHeader =
     getHeader(
       req,
-      "pagar-signature"
+      "Pagar-Signature"
     );
 
   if (!signatureHeader) {
@@ -151,38 +244,48 @@ function verifyWebhook(req, rawBody) {
     };
   }
 
-  const parts = {};
 
-  for (
-    const item of String(
-      signatureHeader
-    ).split(",")
-  ) {
+  /* =======================================================
+   * LER:
+   *
+   * t=timestamp
+   * v1=assinatura
+   * ======================================================= */
+
+  let timestamp = null;
+  let receivedSignature = null;
+
+  const parts =
+    String(signatureHeader)
+      .split(",");
+
+  for (const part of parts) {
     const index =
-      item.indexOf("=");
+      part.indexOf("=");
 
     if (index === -1) {
       continue;
     }
 
     const key =
-      item
+      part
         .slice(0, index)
         .trim();
 
     const value =
-      item
+      part
         .slice(index + 1)
         .trim();
 
-    parts[key] = value;
+    if (key === "t") {
+      timestamp = value;
+    }
+
+    if (key === "v1") {
+      receivedSignature = value;
+    }
   }
 
-  const timestamp =
-    parts.t;
-
-  const receivedSignature =
-    parts.v1;
 
   if (
     !timestamp ||
@@ -196,10 +299,13 @@ function verifyWebhook(req, rawBody) {
     };
   }
 
+
+  /* =======================================================
+   * VALIDAR TIMESTAMP
+   * ======================================================= */
+
   if (
-    !/^\d+$/.test(
-      timestamp
-    )
+    !/^\d+$/.test(timestamp)
   ) {
     return {
       ok: false,
@@ -209,33 +315,36 @@ function verifyWebhook(req, rawBody) {
     };
   }
 
+
+  const timestampSeconds =
+    getTimestampSeconds(
+      timestamp
+    );
+
   if (
-    !/^[a-f0-9]{64}$/i.test(
-      receivedSignature
-    )
+    timestampSeconds === null
   ) {
     return {
       ok: false,
       status: 401,
       error:
-        "Formato de assinatura inválido."
+        "Timestamp inválido."
     };
   }
 
-  /*
-   * =======================================================
+
+  /* =======================================================
    * EXPIRAÇÃO
    *
-   * Aceitamos até 15 minutos.
-   * =======================================================
-   */
+   * 15 minutos
+   * ======================================================= */
 
-  const timestampSeconds =
-    Number(timestamp) / 1000;
+  const now =
+    Date.now() / 1000;
 
   const age =
     Math.abs(
-      Date.now() / 1000 -
+      now -
       timestampSeconds
     );
 
@@ -251,15 +360,32 @@ function verifyWebhook(req, rawBody) {
     };
   }
 
-  /*
-   * =======================================================
-   * ASSINATURA
+
+  /* =======================================================
+   * VALIDAR FORMATO DA ASSINATURA
+   * ======================================================= */
+
+  if (
+    !/^[a-f0-9]{64}$/i.test(
+      receivedSignature
+    )
+  ) {
+    return {
+      ok: false,
+      status: 401,
+      error:
+        "Formato de assinatura inválido."
+    };
+  }
+
+
+  /* =======================================================
+   * CALCULAR HMAC
    *
    * Pagar:
    *
    * timestamp + "." + rawBody
-   * =======================================================
-   */
+   * ======================================================= */
 
   const signedPayload =
     `${timestamp}.${rawBody}`;
@@ -276,6 +402,11 @@ function verifyWebhook(req, rawBody) {
       )
       .digest("hex");
 
+
+  /* =======================================================
+   * COMPARAR
+   * ======================================================= */
+
   const valid =
     safeCompareHex(
       receivedSignature,
@@ -291,11 +422,18 @@ function verifyWebhook(req, rawBody) {
     };
   }
 
+
   return {
     ok: true,
-    eventId: String(eventId)
+    eventId:
+      String(eventId).trim()
   };
 }
+
+
+/* =========================================================
+ * EVENT TYPE
+ * ========================================================= */
 
 function getEventType(event) {
   return String(
@@ -307,6 +445,11 @@ function getEventType(event) {
     .toLowerCase();
 }
 
+
+/* =========================================================
+ * PAYMENT
+ * ========================================================= */
+
 function getPayment(event) {
   return (
     event?.payment ||
@@ -316,9 +459,22 @@ function getPayment(event) {
   );
 }
 
-export default async function handler(req, res) {
+
+/* =========================================================
+ * HANDLER
+ * ========================================================= */
+
+export default async function handler(
+  req,
+  res
+) {
+
+  /* =======================================================
+   * MÉTODO
+   * ======================================================= */
 
   if (req.method !== "POST") {
+
     res.setHeader(
       "Allow",
       "POST"
@@ -331,7 +487,13 @@ export default async function handler(req, res) {
     });
   }
 
+
+  /* =======================================================
+   * ENVIRONMENT VARIABLES
+   * ======================================================= */
+
   if (!process.env.DATABASE_URL) {
+
     return json(res, 500, {
       success: false,
       error:
@@ -340,6 +502,7 @@ export default async function handler(req, res) {
   }
 
   if (!process.env.PAGAR_WEBHOOK_SECRET) {
+
     return json(res, 500, {
       success: false,
       error:
@@ -347,18 +510,29 @@ export default async function handler(req, res) {
     });
   }
 
+
   try {
+
+    /* =====================================================
+     * BODY BRUTO
+     * ===================================================== */
 
     const rawBody =
       await getRawBody(req);
 
     if (!rawBody) {
+
       return json(res, 400, {
         success: false,
         error:
           "Body do webhook vazio."
       });
     }
+
+
+    /* =====================================================
+     * SEGURANÇA
+     * ===================================================== */
 
     const verification =
       verifyWebhook(
@@ -384,8 +558,14 @@ export default async function handler(req, res) {
       );
     }
 
+
     const eventId =
       verification.eventId;
+
+
+    /* =====================================================
+     * JSON
+     * ===================================================== */
 
     let event;
 
@@ -403,21 +583,31 @@ export default async function handler(req, res) {
       });
     }
 
+
+    /* =====================================================
+     * DADOS DO EVENTO
+     * ===================================================== */
+
     const eventType =
       getEventType(event);
 
     const payment =
       getPayment(event);
 
+
     const paymentId =
       payment?.id
         ? String(payment.id)
         : null;
 
+
     const reference =
       payment?.reference
-        ? String(payment.reference)
+        ? String(
+            payment.reference
+          ).trim()
         : null;
+
 
     const paymentStatus =
       String(
@@ -426,33 +616,52 @@ export default async function handler(req, res) {
         .trim()
         .toUpperCase();
 
+
     const amountMzn =
       Number(
         payment?.amountMzn
       );
+
+
+    /* =====================================================
+     * DATABASE
+     * ===================================================== */
 
     const sql =
       neon(
         process.env.DATABASE_URL
       );
 
+
+    /* =====================================================
+     * IDEMPOTÊNCIA
+     * ===================================================== */
+
     const existing =
       await sql`
         SELECT
-          id,
-          processed_at
+          id
         FROM pagar_webhook_events
         WHERE event_id = ${eventId}
         LIMIT 1
       `;
 
-    if (existing.length > 0) {
+
+    if (
+      existing.length > 0
+    ) {
+
       return json(res, 200, {
         success: true,
         duplicate: true,
         event_id: eventId
       });
     }
+
+
+    /* =====================================================
+     * EVENTOS QUE NÃO SÃO DE PAGAMENTO
+     * ===================================================== */
 
     if (
       !eventType.startsWith(
@@ -492,6 +701,11 @@ export default async function handler(req, res) {
       });
     }
 
+
+    /* =====================================================
+     * PAYMENT PRECISA TER ID OU REFERENCE
+     * ===================================================== */
+
     if (
       !paymentId &&
       !reference
@@ -504,7 +718,13 @@ export default async function handler(req, res) {
       });
     }
 
+
+    /* =====================================================
+     * LOCALIZAR PEDIDO
+     * ===================================================== */
+
     let orders = [];
+
 
     if (reference) {
 
@@ -524,6 +744,7 @@ export default async function handler(req, res) {
           LIMIT 1
         `;
     }
+
 
     if (
       orders.length === 0 &&
@@ -547,7 +768,14 @@ export default async function handler(req, res) {
         `;
     }
 
-    if (orders.length === 0) {
+
+    /* =====================================================
+     * PEDIDO NÃO ENCONTRADO
+     * ===================================================== */
+
+    if (
+      orders.length === 0
+    ) {
 
       await sql`
         INSERT INTO pagar_webhook_events (
@@ -589,8 +817,14 @@ export default async function handler(req, res) {
       });
     }
 
+
     const order =
       orders[0];
+
+
+    /* =====================================================
+     * VALIDAR PAYMENT ID
+     * ===================================================== */
 
     if (
       order.pagar_payment_id &&
@@ -607,6 +841,11 @@ export default async function handler(req, res) {
       });
     }
 
+
+    /* =====================================================
+     * VALIDAR REFERENCE
+     * ===================================================== */
+
     if (
       reference &&
       String(
@@ -621,8 +860,14 @@ export default async function handler(req, res) {
       });
     }
 
+
+    /* =====================================================
+     * VALIDAR VALOR
+     * ===================================================== */
+
     const orderAmount =
       Number(order.amount);
+
 
     if (
       !Number.isFinite(
@@ -636,6 +881,7 @@ export default async function handler(req, res) {
           "Pagamento sem amountMzn válido."
       });
     }
+
 
     if (
       amountMzn !==
@@ -661,84 +907,127 @@ export default async function handler(req, res) {
       });
     }
 
+
+    /* =====================================================
+     * PAGAMENTO CONFIRMADO
+     *
+     * SOMENTE:
+     *
+     * payment.succeeded
+     * +
+     * PAID
+     * ===================================================== */
+
     const confirmed =
       eventType ===
         "payment.succeeded" &&
       paymentStatus ===
         "PAID";
 
+
     if (confirmed) {
 
-      const [
-        eventInsert,
-        orderUpdate
-      ] = await sql.transaction([
+      /*
+       * Inserimos o evento e atualizamos o pedido
+       * dentro da mesma transação lógica.
+       */
 
-        sql`
-          INSERT INTO pagar_webhook_events (
-            event_id,
-            event_type,
-            payment_id,
-            reference,
-            payload,
-            processed_at,
-            created_at
-          )
-          VALUES (
-            ${eventId},
-            ${eventType},
-            ${paymentId},
-            ${reference},
-            ${JSON.stringify(event)}::jsonb,
-            NOW(),
-            NOW()
-          )
-          ON CONFLICT (event_id)
-          DO NOTHING
-          RETURNING
-            id,
-            event_id
-        `,
+      const result =
+        await sql`
+          WITH inserted_event AS (
 
-        sql`
-          UPDATE orders
-          SET
-            status =
-              'PAYMENT_CONFIRMED',
-
-            pagar_payment_id =
-              COALESCE(
-                pagar_payment_id,
-                ${paymentId}
-              ),
-
-            pagar_event_id =
+            INSERT INTO pagar_webhook_events (
+              event_id,
+              event_type,
+              payment_id,
+              reference,
+              payload,
+              processed_at,
+              created_at
+            )
+            VALUES (
               ${eventId},
-
-            updated_at =
+              ${eventType},
+              ${paymentId},
+              ${reference},
+              ${JSON.stringify(event)}::jsonb,
+              NOW(),
               NOW()
+            )
 
-          WHERE id =
-            ${order.id}
+            ON CONFLICT (event_id)
+            DO NOTHING
 
-          AND status NOT IN (
-            'PAYMENT_CONFIRMED',
-            'USDT_SENT',
-            'COMPLETED'
+            RETURNING id
+          ),
+
+          updated_order AS (
+
+            UPDATE orders
+            SET
+              status =
+                'PAYMENT_CONFIRMED',
+
+              pagar_payment_id =
+                COALESCE(
+                  pagar_payment_id,
+                  ${paymentId}
+                ),
+
+              pagar_event_id =
+                ${eventId},
+
+              updated_at =
+                NOW()
+
+            WHERE id =
+              ${order.id}
+
+            AND status NOT IN (
+              'PAYMENT_CONFIRMED',
+              'USDT_SENT',
+              'COMPLETED'
+            )
+
+            AND EXISTS (
+              SELECT 1
+              FROM inserted_event
+            )
+
+            RETURNING
+              order_id,
+              status,
+              amount,
+              usdt_amount,
+              rate,
+              pagar_payment_id
           )
 
-          RETURNING
-            order_id,
-            status,
-            amount,
-            usdt_amount,
-            rate,
-            pagar_payment_id
-        `
-      ]);
+          SELECT
+            (
+              SELECT id
+              FROM inserted_event
+              LIMIT 1
+            ) AS event_id,
+
+            (
+              SELECT row_to_json(updated_order)
+              FROM updated_order
+              LIMIT 1
+            ) AS updated_order
+        `;
+
+
+      const row =
+        result[0];
+
+
+      /*
+       * Evento já existia.
+       */
 
       if (
-        eventInsert.length === 0
+        !row?.event_id
       ) {
 
         return json(res, 200, {
@@ -748,8 +1037,17 @@ export default async function handler(req, res) {
         });
       }
 
-      const confirmedOrder =
-        orderUpdate[0];
+
+      let confirmedOrder =
+        null;
+
+      if (
+        row.updated_order
+      ) {
+        confirmedOrder =
+          row.updated_order;
+      }
+
 
       return json(res, 200, {
 
@@ -808,14 +1106,15 @@ export default async function handler(req, res) {
 
           paidAt:
             payment?.paidAt ||
-            null,
-
-          receipt:
-            payment?.receipt ||
             null
         }
       });
     }
+
+
+    /* =====================================================
+     * PAGAMENTO FALHOU
+     * ===================================================== */
 
     if (
       eventType ===
@@ -828,6 +1127,12 @@ export default async function handler(req, res) {
         )
           .trim()
           .toUpperCase();
+
+
+      /*
+       * Nunca transformar um pagamento já confirmado
+       * em FAILED.
+       */
 
       if (
         [
@@ -872,12 +1177,10 @@ export default async function handler(req, res) {
         });
       }
 
-      const [
-        eventInsert,
-        orderUpdate
-      ] = await sql.transaction([
 
-        sql`
+      await sql`
+        WITH inserted_event AS (
+
           INSERT INTO pagar_webhook_events (
             event_id,
             event_type,
@@ -896,56 +1199,46 @@ export default async function handler(req, res) {
             NOW(),
             NOW()
           )
+
           ON CONFLICT (event_id)
           DO NOTHING
-          RETURNING
-            id,
-            event_id
-        `,
 
-        sql`
-          UPDATE orders
-          SET
-            status =
-              'FAILED',
+          RETURNING id
+        )
 
-            pagar_payment_id =
-              COALESCE(
-                pagar_payment_id,
-                ${paymentId}
-              ),
+        UPDATE orders
 
-            pagar_event_id =
-              ${eventId},
+        SET
+          status =
+            'FAILED',
 
-            updated_at =
-              NOW()
+          pagar_payment_id =
+            COALESCE(
+              pagar_payment_id,
+              ${paymentId}
+            ),
 
-          WHERE id =
-            ${order.id}
+          pagar_event_id =
+            ${eventId},
 
-          AND status NOT IN (
-            'PAYMENT_CONFIRMED',
-            'USDT_SENT',
-            'COMPLETED'
-          )
+          updated_at =
+            NOW()
 
-          RETURNING
-            order_id,
-            status
-        `
-      ]);
+        WHERE id =
+          ${order.id}
 
-      if (
-        eventInsert.length === 0
-      ) {
+        AND status NOT IN (
+          'PAYMENT_CONFIRMED',
+          'USDT_SENT',
+          'COMPLETED'
+        )
 
-        return json(res, 200, {
-          success: true,
-          duplicate: true,
-          event_id: eventId
-        });
-      }
+        AND EXISTS (
+          SELECT 1
+          FROM inserted_event
+        )
+      `;
+
 
       return json(res, 200, {
 
@@ -956,11 +1249,9 @@ export default async function handler(req, res) {
         order: {
 
           order_id:
-            orderUpdate[0]?.order_id ||
             order.order_id,
 
           status:
-            orderUpdate[0]?.status ||
             "FAILED"
         },
 
@@ -978,6 +1269,13 @@ export default async function handler(req, res) {
         }
       });
     }
+
+
+    /* =====================================================
+     * PENDING / PROCESSING / OUTROS
+     *
+     * NÃO CONFIRMAR.
+     * ===================================================== */
 
     await sql`
       INSERT INTO pagar_webhook_events (
@@ -1001,6 +1299,7 @@ export default async function handler(req, res) {
       ON CONFLICT (event_id)
       DO NOTHING
     `;
+
 
     return json(res, 200, {
 
@@ -1034,6 +1333,7 @@ export default async function handler(req, res) {
       }
     });
 
+
   } catch (error) {
 
     console.error(
@@ -1051,6 +1351,13 @@ export default async function handler(req, res) {
     });
   }
 }
+
+
+/* =========================================================
+ * VERCEL
+ *
+ * Precisamos do body bruto para HMAC.
+ * ========================================================= */
 
 export const config = {
   api: {
