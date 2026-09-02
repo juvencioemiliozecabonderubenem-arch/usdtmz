@@ -1,8 +1,13 @@
 const TRON_HOST = "https://api.trongrid.io";
 const USDT_DECIMALS = 6;
 
+const DEFAULT_USDT_CONTRACT =
+  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+
 function isValidTronAddress(address) {
-  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
+  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
+    String(address || "").trim()
+  );
 }
 
 function formatUsdt(rawBalance) {
@@ -31,21 +36,35 @@ export default async function handler(req, res) {
   }
 
   try {
-    const walletAddress =
-      process.env.TRON_WALLET_ADDRESS;
+    /*
+     * Aceita os dois nomes para evitar incompatibilidade
+     * entre a configuração antiga e a nova da Vercel.
+     *
+     * Preferência:
+     * 1. TRON_WALLET_ADDRESS
+     * 2. ENDERECO_DA_CARTEIRA_TRON
+     */
+    const walletAddress = String(
+      process.env.TRON_WALLET_ADDRESS ||
+      process.env.ENDERECO_DA_CARTEIRA_TRON ||
+      ""
+    ).trim();
 
-    const usdtContract =
+    const usdtContract = String(
       process.env.USDT_CONTRACT_ADDRESS ||
-      "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+      DEFAULT_USDT_CONTRACT
+    ).trim();
 
-    const apiKey =
-      process.env.TRONGRID_API_KEY;
+    const apiKey = String(
+      process.env.TRONGRID_API_KEY ||
+      ""
+    ).trim();
 
     if (!walletAddress) {
       return res.status(500).json({
         success: false,
         error:
-          "TRON_WALLET_ADDRESS não configurada no Vercel."
+          "Endereço da carteira TRON não configurado na Vercel. Configure TRON_WALLET_ADDRESS."
       });
     }
 
@@ -67,13 +86,13 @@ export default async function handler(req, res) {
       return res.status(500).json({
         success: false,
         error:
-          "TRONGRID_API_KEY não configurada no Vercel."
+          "TRONGRID_API_KEY não configurada na Vercel."
       });
     }
 
     const url =
       `${TRON_HOST}/v1/accounts/${walletAddress}/trc20/balance` +
-      `?contract_address=${usdtContract}`;
+      `?contract_address=${encodeURIComponent(usdtContract)}`;
 
     const response = await fetch(url, {
       method: "GET",
@@ -110,35 +129,33 @@ export default async function handler(req, res) {
           String(
             data?.Error ||
             data?.error ||
+            data?.message ||
             "erro desconhecido"
           )
       });
     }
 
-    const tokens =
-      Array.isArray(data?.data)
-        ? data.data
-        : [];
+    const tokens = Array.isArray(data?.data)
+      ? data.data
+      : [];
 
     const token = tokens.find((item) => {
-      const contract =
-        String(
-          item?.token_id ||
-          item?.contract_address ||
-          ""
-        ).toLowerCase();
+      const contract = String(
+        item?.token_id ||
+        item?.contract_address ||
+        ""
+      ).toLowerCase();
 
       return (
-        contract ===
-        usdtContract.toLowerCase()
+        contract === usdtContract.toLowerCase()
       );
     });
 
-    const rawBalance =
-      String(token?.balance || "0");
+    const rawBalance = String(
+      token?.balance || "0"
+    );
 
-    const balance =
-      formatUsdt(rawBalance);
+    const balance = formatUsdt(rawBalance);
 
     return res.status(200).json({
       success: true,
@@ -169,8 +186,7 @@ export default async function handler(req, res) {
 
     return res.status(500).json({
       success: false,
-      error:
-        "Erro ao consultar a carteira."
+      error: "Erro ao consultar a carteira."
     });
   }
 }
