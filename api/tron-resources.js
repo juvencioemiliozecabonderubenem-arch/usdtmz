@@ -5,15 +5,21 @@ const TRON_HOST =
 const TRONGRID_API_KEY =
   process.env.TRONGRID_API_KEY;
 
+const WALLET_ADDRESS =
+  process.env.TRON_WALLET_ADDRESS;
+
 const USDT_CONTRACT =
+  process.env.USDT_CONTRACT_ADDRESS ||
   "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 
-const WALLET_ADDRESS =
-  "TVSGrUA6foo527kWL5NiTFBmMX9F38F8A4";
+const USDT_DECIMALS = 6;
 
+
+/* =========================================================
+   JSON
+========================================================= */
 
 function json(res, status, data) {
-
   res.setHeader(
     "Content-Type",
     "application/json"
@@ -25,65 +31,98 @@ function json(res, status, data) {
 }
 
 
-function isValidTronAddress(address) {
+/* =========================================================
+   VALIDAR ENDEREÇO TRON
+========================================================= */
 
+function isValidTronAddress(address) {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(
     String(address || "").trim()
   );
-
 }
 
+
+/* =========================================================
+   FORMATAR USDT
+========================================================= */
+
+function formatUsdt(raw) {
+  try {
+    const value = BigInt(
+      String(raw ?? "0")
+    );
+
+    const divisor = 10n ** BigInt(
+      USDT_DECIMALS
+    );
+
+    const whole =
+      value / divisor;
+
+    const fraction =
+      (value % divisor)
+        .toString()
+        .padStart(
+          USDT_DECIMALS,
+          "0"
+        );
+
+    return `${whole}.${fraction}`;
+
+  } catch {
+    return "0.000000";
+  }
+}
+
+
+/* =========================================================
+   TRONGRID REQUEST
+========================================================= */
 
 async function tronRequest(
   endpoint,
   options = {}
 ) {
-
   const response =
     await fetch(
       `${TRON_HOST}${endpoint}`,
       {
-
         ...options,
 
         headers: {
-
           "Content-Type":
             "application/json",
 
-          "TRON-PRO-API-KEY":
-            TRONGRID_API_KEY,
+          Accept:
+            "application/json",
+
+          ...(TRONGRID_API_KEY
+            ? {
+                "TRON-PRO-API-KEY":
+                  TRONGRID_API_KEY
+              }
+            : {}),
 
           ...(options.headers || {})
-
         }
-
       }
     );
-
 
   const text =
     await response.text();
 
-
   let data;
 
   try {
-
     data =
       JSON.parse(text);
-
   } catch {
-
     data = {
       raw: text
     };
-
   }
 
-
   if (!response.ok) {
-
     throw new Error(
       `TRONGrid HTTP ${response.status}: ${
         data?.message ||
@@ -92,27 +131,30 @@ async function tronRequest(
         "erro desconhecido"
       }`
     );
-
   }
 
-
   return data;
-
 }
 
+
+/* =========================================================
+   HANDLER
+========================================================= */
 
 export default async function handler(
   req,
   res
 ) {
 
-  /*
-   * =====================================================
-   * MÉTODO
-   * =====================================================
-   */
+  /* =======================================================
+     MÉTODO
+  ======================================================= */
 
   if (req.method !== "GET") {
+    res.setHeader(
+      "Allow",
+      "GET"
+    );
 
     return json(
       res,
@@ -123,20 +165,16 @@ export default async function handler(
           "Método não permitido."
       }
     );
-
   }
 
 
   try {
 
-    /*
-     * =====================================================
-     * API KEY
-     * =====================================================
-     */
+    /* =====================================================
+       CONFIGURAÇÕES
+    ===================================================== */
 
     if (!TRONGRID_API_KEY) {
-
       return json(
         res,
         500,
@@ -146,119 +184,104 @@ export default async function handler(
             "TRONGRID_API_KEY não configurada no Vercel."
         }
       );
-
     }
 
-
-    /*
-     * =====================================================
-     * ENDEREÇO
-     * =====================================================
-     */
-
-    if (
-      !isValidTronAddress(
-        WALLET_ADDRESS
-      )
-    ) {
-
+    if (!WALLET_ADDRESS) {
       return json(
         res,
         500,
         {
           success: false,
           error:
-            "Endereço da carteira TRON inválido."
+            "TRON_WALLET_ADDRESS não configurada no Vercel."
         }
       );
+    }
 
+    if (
+      !isValidTronAddress(
+        WALLET_ADDRESS
+      )
+    ) {
+      return json(
+        res,
+        500,
+        {
+          success: false,
+          error:
+            "TRON_WALLET_ADDRESS inválida."
+        }
+      );
+    }
+
+    if (
+      !isValidTronAddress(
+        USDT_CONTRACT
+      )
+    ) {
+      return json(
+        res,
+        500,
+        {
+          success: false,
+          error:
+            "USDT_CONTRACT_ADDRESS inválido."
+        }
+      );
     }
 
 
-    /*
-     * =====================================================
-     * CONVERTER ENDEREÇO PARA HEX
-     * =====================================================
-     */
+    /* =====================================================
+       CONTA TRON
+    ===================================================== */
 
-    const addressResponse =
+    const account =
       await tronRequest(
-        `/wallet/getaccount`,
+        "/wallet/getaccount",
         {
           method: "POST",
 
           body: JSON.stringify({
-
             address:
               WALLET_ADDRESS,
 
             visible:
               true
-
           })
-
         }
       );
 
 
-    /*
-     * =====================================================
-     * SALDO TRX
-     * =====================================================
-     */
-
-    const accountResponse =
-      await tronRequest(
-        `/wallet/getaccount`,
-        {
-          method: "POST",
-
-          body: JSON.stringify({
-
-            address:
-              WALLET_ADDRESS,
-
-            visible:
-              true
-
-          })
-
-        }
-      );
-
+    /* =====================================================
+       SALDO TRX
+    ===================================================== */
 
     const trxSun =
       Number(
-        accountResponse?.balance || 0
+        account?.balance || 0
       );
-
 
     const trxBalance =
       trxSun / 1_000_000;
 
 
-    /*
-     * =====================================================
-     * ENERGY + BANDWIDTH
-     * =====================================================
-     */
+    /* =====================================================
+       ENERGY / BANDWIDTH
+    ===================================================== */
 
     const resources =
       await tronRequest(
-        `/wallet/getaccountresource`,
+        "/wallet/getaccountresource",
         {
           method: "POST",
 
           body: JSON.stringify({
-
             address:
               WALLET_ADDRESS,
 
             visible:
               true
-
           })
-
         }
       );
 
@@ -268,14 +291,12 @@ export default async function handler(
         resources?.EnergyLimit || 0
       );
 
-
     const energyUsed =
       Number(
         resources?.EnergyUsed || 0
       );
 
-
-    const energyRemaining =
+    const energyAvailable =
       Math.max(
         0,
         energyLimit -
@@ -283,37 +304,21 @@ export default async function handler(
       );
 
 
-    /*
-     * =====================================================
-     * BANDWIDTH
-     * =====================================================
-     */
+    /* =====================================================
+       BANDWIDTH NORMAL
+    ===================================================== */
 
     const netLimit =
       Number(
         resources?.NetLimit || 0
       );
 
-
     const netUsed =
       Number(
         resources?.NetUsed || 0
       );
 
-
-    const freeNetLimit =
-      Number(
-        resources?.freeNetLimit || 0
-      );
-
-
-    const freeNetUsed =
-      Number(
-        resources?.freeNetUsed || 0
-      );
-
-
-    const normalBandwidthRemaining =
+    const normalAvailable =
       Math.max(
         0,
         netLimit -
@@ -321,7 +326,21 @@ export default async function handler(
       );
 
 
-    const freeBandwidthRemaining =
+    /* =====================================================
+       BANDWIDTH FREE
+    ===================================================== */
+
+    const freeNetLimit =
+      Number(
+        resources?.freeNetLimit || 0
+      );
+
+    const freeNetUsed =
+      Number(
+        resources?.freeNetUsed || 0
+      );
+
+    const freeAvailable =
       Math.max(
         0,
         freeNetLimit -
@@ -329,34 +348,20 @@ export default async function handler(
       );
 
 
-    const totalBandwidthRemaining =
-      normalBandwidthRemaining +
-      freeBandwidthRemaining;
+    const totalBandwidthAvailable =
+      normalAvailable +
+      freeAvailable;
 
 
-    /*
-     * =====================================================
-     * USDT
-     * =====================================================
-     *
-     * Consulta direta do contrato TRC-20.
-     */
-
-    const contractAddressHex =
-      "41" +
-      USDT_CONTRACT
-        ? null
-        : null;
-
-
-    /*
-     * Usamos /v1/accounts para obter
-     * os TRC-20 associados à carteira.
-     */
+    /* =====================================================
+       SALDO USDT TRC-20
+    ===================================================== */
 
     const accountData =
       await tronRequest(
-        `/v1/accounts/${WALLET_ADDRESS}`,
+        `/v1/accounts/${encodeURIComponent(
+          WALLET_ADDRESS
+        )}`,
         {
           method: "GET"
         }
@@ -364,11 +369,19 @@ export default async function handler(
 
 
     let usdtBalanceRaw =
-      0;
+      "0";
+
+
+    const accountList =
+      Array.isArray(
+        accountData?.data
+      )
+        ? accountData.data
+        : [];
 
 
     const trc20 =
-      accountData?.data?.[0]?.trc20;
+      accountList[0]?.trc20;
 
 
     if (
@@ -388,40 +401,33 @@ export default async function handler(
         ) {
 
           usdtBalanceRaw =
-            Number(
+            String(
               token[USDT_CONTRACT]
             );
 
           break;
-
         }
-
       }
-
     }
 
 
     const usdtBalance =
-      usdtBalanceRaw /
-      1_000_000;
+      formatUsdt(
+        usdtBalanceRaw
+      );
 
 
-    /*
-     * =====================================================
-     * RESPOSTA
-     * =====================================================
-     */
+    /* =====================================================
+       RESPOSTA
+    ===================================================== */
 
     return json(
       res,
       200,
       {
-
-        success:
-          true,
+        success: true,
 
         wallet: {
-
           address:
             WALLET_ADDRESS,
 
@@ -436,21 +442,17 @@ export default async function handler(
 
           contract:
             USDT_CONTRACT
-
         },
 
         balances: {
-
           trx:
             trxBalance,
 
           usdt:
             usdtBalance
-
         },
 
         energy: {
-
           limit:
             energyLimit,
 
@@ -458,12 +460,10 @@ export default async function handler(
             energyUsed,
 
           available:
-            energyRemaining
-
+            energyAvailable
         },
 
         bandwidth: {
-
           normal_limit:
             netLimit,
 
@@ -471,7 +471,7 @@ export default async function handler(
             netUsed,
 
           normal_available:
-            normalBandwidthRemaining,
+            normalAvailable,
 
           free_limit:
             freeNetLimit,
@@ -480,49 +480,36 @@ export default async function handler(
             freeNetUsed,
 
           free_available:
-            freeBandwidthRemaining,
+            freeAvailable,
 
           total_available:
-            totalBandwidthRemaining
-
+            totalBandwidthAvailable
         },
 
         broadcasted:
           false
-
       }
     );
-
 
   } catch (error) {
 
     console.error(
       "USDTMZ TRON RESOURCES ERROR:",
+      error?.message ||
       error
     );
 
-
-    /*
-     * Durante o diagnóstico mostramos
-     * a mensagem real do erro.
-     */
-
     return json(
       res,
-      500,
+      502,
       {
-
-        success:
-          false,
-
+        success: false,
         error:
+          "Não foi possível consultar os recursos da carteira TRON.",
+        details:
           error?.message ||
-          String(error) ||
           "Erro desconhecido."
-
       }
     );
-
   }
-
 }
