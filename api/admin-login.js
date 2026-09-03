@@ -1,32 +1,3 @@
-// /api/admin-login.js
-//
-// USDTMZ — ADMIN LOGIN
-//
-// Autenticação administrativa usando exclusivamente NEON.
-//
-// FLUXO:
-//
-// Email + senha
-//      ↓
-// admin_users
-//      ↓
-// verificar password_hash com scrypt
-//      ↓
-// criar token aleatório
-//      ↓
-// guardar SHA-256(token) em admin_sessions
-//      ↓
-// devolver token ao navegador
-//
-// IMPORTANTE:
-// - Supabase NÃO é utilizado.
-// - A senha nunca é armazenada em texto puro.
-// - O password_hash usa scrypt.
-// - O token da sessão é aleatório.
-// - No banco é armazenado somente SHA-256 do token.
-// - Compatível com admin-me.js e admin-dashboard.js.
-//
-
 import { neon } from "@neondatabase/serverless";
 import crypto from "node:crypto";
 
@@ -39,9 +10,7 @@ function json(res, status, data) {
 }
 
 function parseBody(req) {
-  if (!req.body) {
-    return {};
-  }
+  if (!req.body) return {};
 
   if (typeof req.body === "string") {
     try {
@@ -65,18 +34,44 @@ function sha256(value) {
     .digest("hex");
 }
 
-/*
- * Verifica password_hash no formato:
- *
- * scrypt$N$r$p$salt$derivedKey
- *
- * Exemplo estrutural:
- *
- * scrypt$16384$8$1$SAL...$HASH...
- *
- * O salt e o hash são armazenados
- * dentro do password_hash.
- */
+function createScryptHash(password) {
+  return new Promise((resolve, reject) => {
+    const N = 16384;
+    const r = 8;
+    const p = 1;
+    const salt = crypto.randomBytes(16);
+
+    crypto.scrypt(
+      password,
+      salt,
+      64,
+      {
+        N,
+        r,
+        p,
+        maxmem: 32 * 1024 * 1024
+      },
+      (error, derivedKey) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        const hash = [
+          "scrypt",
+          N,
+          r,
+          p,
+          salt.toString("hex"),
+          derivedKey.toString("hex")
+        ].join("$");
+
+        resolve(hash);
+      }
+    );
+  });
+}
+
 async function verifyScryptPassword(password, storedHash) {
   const parts = String(storedHash || "").split("$");
 
@@ -107,16 +102,9 @@ async function verifyScryptPassword(password, storedHash) {
     !Number.isInteger(p) ||
     N <= 1 ||
     r <= 0 ||
-    p <= 0
+    p <= 0 ||
+    N > 1048576
   ) {
-    return false;
-  }
-
-  /*
-   * Evita parâmetros absurdamente grandes
-   * vindos diretamente do banco.
-   */
-  if (N > 1048576) {
     return false;
   }
 
@@ -131,7 +119,7 @@ async function verifyScryptPassword(password, storedHash) {
   const salt = Buffer.from(saltHex, "hex");
   const expectedKey = Buffer.from(keyHex, "hex");
 
-  if (salt.length === 0 || expectedKey.length === 0) {
+  if (!salt.length || !expectedKey.length) {
     return false;
   }
 
@@ -161,11 +149,10 @@ async function verifyScryptPassword(password, storedHash) {
       );
     });
 
-    if (!Buffer.isBuffer(derivedKey)) {
-      return false;
-    }
-
-    if (derivedKey.length !== expectedKey.length) {
+    if (
+      !Buffer.isBuffer(derivedKey) ||
+      derivedKey.length !== expectedKey.length
+    ) {
       return false;
     }
 
@@ -224,7 +211,6 @@ export default async function handler(req, res) {
 
   try {
     const sql = neon(DATABASE_URL);
-
     const body = parseBody(req);
 
     const email = String(
@@ -244,10 +230,6 @@ export default async function handler(req, res) {
       });
     }
 
-    /*
-     * Limite básico para evitar entradas
-     * anormalmente grandes.
-     */
     if (email.length > 254) {
       return json(res, 400, {
         success: false,
@@ -262,9 +244,6 @@ export default async function handler(req, res) {
       });
     }
 
-    /*
-     * Procurar administrador ativo.
-     */
     const users = await sql`
       SELECT
         id,
@@ -277,9 +256,6 @@ export default async function handler(req, res) {
       LIMIT 1
     `;
 
-    /*
-     * Não revelar se o email existe.
-     */
     if (users.length === 0) {
       return json(res, 401, {
         success: false,
@@ -289,138 +265,66 @@ export default async function handler(req, res) {
 
     const admin = users[0];
 
-    const storedHash = String(
+    let storedHash = String(
       admin.password_hash || ""
     );
 
     /*
-     * O placeholder antigo não pode ser usado
-     * como credencial.
+     * CONFIGURAÇÃO INICIAL
+     *
+     * Enquanto password_hash estiver como
+     * "SEU_HASH", usamos temporariamente
+     * ADMIN_PASSWORD para criar o hash.
+     *
+     * A senha digitada precisa ser igual à
+     * ADMIN_PASSWORD configurada na Vercel.
      */
     if (
       !storedHash ||
       storedHash === "SEU_HASH"
     ) {
-      console.error(
-        "ADMIN LOGIN: password_hash ainda não configurado."
-      );
+      const setupPassword =
+        String(
+          process.env.ADMIN_PASSWORD || ""
+        );
 
-      return json(res, 500, {
-        success: false,
-        error:
-          "A senha administrativa ainda não foi configurada."
-      });
-    }
+      if (!setupPassword) {
+        console.error(
+          "ADMIN LOGIN: ADMIN_PASSWORD não configurada."
+        );
 
-    /*
-     * Verificar senha com scrypt.
-     */
-    const passwordValid =
-      await verifyScryptPassword(
-        password,
-        storedHash
-      );
+        return json(res, 500, {
+          success: false,
+          error:
+            "A senha administrativa ainda não foi configurada."
+        });
+      }
 
-    if (!passwordValid) {
-      return json(res, 401, {
-        success: false,
-        error: "Email ou senha incorretos."
-      });
-    }
+      if (password !== setupPassword) {
+        return json(res, 401, {
+          success: false,
+          error: "Email ou senha incorretos."
+        });
+      }
 
-    /*
-     * Criar novo token de sessão.
-     */
-    const sessionToken =
-      createSessionToken();
+      const newHash =
+        await createScryptHash(
+          setupPassword
+        );
 
-    /*
-     * Nunca guardar o token original
-     * no banco.
-     */
-    const tokenHash =
-      sha256(sessionToken);
+      const updated = await sql`
+        UPDATE admin_users
+        SET
+          password_hash = ${newHash},
+          updated_at = NOW()
+        WHERE id = ${admin.id}
+          AND active = true
+          AND password_hash = 'SEU_HASH'
+        RETURNING id, email
+      `;
 
-    /*
-     * Expiração da sessão.
-     */
-    const expiresAt =
-      new Date(
-        Date.now() +
-          SESSION_HOURS *
-            60 *
-            60 *
-            1000
-      );
-
-    /*
-     * Remover sessões anteriores
-     * expiradas deste administrador.
-     */
-    await sql`
-      DELETE FROM admin_sessions
-      WHERE user_id = ${admin.id}
-        AND expires_at <= NOW()
-    `;
-
-    /*
-     * Criar nova sessão.
-     */
-    await sql`
-      INSERT INTO admin_sessions (
-        user_id,
-        token_hash,
-        expires_at,
-        created_at
-      )
-      VALUES (
-        ${admin.id},
-        ${tokenHash},
-        ${expiresAt},
-        NOW()
-      )
-    `;
-
-    /*
-     * Cookie seguro.
-     */
-    setSessionCookie(
-      res,
-      sessionToken
-    );
-
-    /*
-     * O frontend também recebe o token.
-     *
-     * Isso permite que chamadas como:
-     *
-     * Authorization: Bearer TOKEN
-     *
-     * funcionem com admin-me.js
-     * e admin-dashboard.js.
-     */
-    return json(res, 200, {
-      success: true,
-      message: "Login realizado com sucesso.",
-      token: sessionToken,
-      admin: {
-        id: Number(admin.id),
-        email: admin.email,
-        role: "admin",
-        active: true
-      },
-      expires_at:
-        expiresAt.toISOString()
-    });
-  } catch (error) {
-    console.error(
-      "USDTMZ ADMIN LOGIN ERROR:",
-      error?.message || error
-    );
-
-    return json(res, 500, {
-      success: false,
-      error: "Erro interno no login."
-    });
-  }
-}
+      if (updated.length === 0) {
+        /*
+         * Outro pedido pode ter configurado
+         * o hash simultaneamente.
+         */
