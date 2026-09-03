@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>USDTMZ — Administração</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      color: #17202a;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: white;
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+    }
+
+    .logo {
+      text-align: center;
+      font-size: 30px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #667085;
+      margin-bottom: 25px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin: 15px 0 7px;
+    }
+
+    input {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #d0d5dd;
+      border-radius: 10px;
+      font-size: 16px;
+    }
+
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 13px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+
+    .login-button {
+      background: #111827;
+      color: white;
+    }
+
+    .logout-button {
+      width: auto;
+      margin: 0;
+      padding: 10px 16px;
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .error {
+      margin-top: 15px;
+      padding: 12px;
+      background: #fee4e2;
+      color: #b42318;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    .admin-page {
+      min-height: 100vh;
+    }
+
+    header {
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 18px 20px;
+    }
+
+    .header-content {
+      max-width: 1200px;
+      margin: auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .brand {
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: auto;
+      padding: 25px 20px;
+    }
+
+    .welcome {
+      margin-bottom: 25px;
+    }
+
+    .welcome h1 {
+      margin: 0 0 6px;
+    }
+
+    .welcome p {
+      margin: 0;
+      color: #667085;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 3px 15px rgba(0,0,0,0.05);
+    }
+
+    .card-title {
+      color: #667085;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .card-value {
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    .section {
+      margin-top: 25px;
+    }
+
+    .section h2 {
+      margin-bottom: 15px;
+    }
+
+    .status {
+      padding: 15px;
+      background: white;
+      border-radius: 12px;
+      color: #667085;
+    }
+
+    @media (max-width: 900px) {
+      .cards {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 550px) {
+      .cards {
+        grid-template-columns: 1fr;
+      }
+
+      .header-content {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .logout-button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- =========================================
+       LOGIN
+  ========================================== -->
+
+  <section id="loginPage" class="login-page">
+
+    <div class="login-card">
+
+      <div class="logo">
+        USDTMZ
+      </div>
+
+      <div class="subtitle">
+        Painel Administrativo
+      </div>
+
+      <form id="loginForm">
+
+        <label for="email">
+          Email
+        </label>
+
+        <input
+          id="email"
+          type="email"
+          autocomplete="email"
+          required
+        >
+
+        <label for="password">
+          Palavra-passe
+        </label>
+
+        <input
+          id="password"
+          type="password"
+          autocomplete="current-password"
+          required
+        >
+
+        <button
+          id="loginButton"
+          class="login-button"
+          type="submit"
+        >
+          Entrar
+        </button>
+
+      </form>
+
+      <div
+        id="loginError"
+        class="error hidden"
+      ></div>
+
+    </div>
+
+  </section>
+
+
+  <!-- =========================================
+       ADMIN DASHBOARD
+  ========================================== -->
+
+  <section
+    id="adminPage"
+    class="admin-page hidden"
+  >
+
+    <header>
+
+      <div class="header-content">
+
+        <div>
+          <div class="brand">
+            USDTMZ — Administração
+          </div>
+
+          <div
+            id="adminEmail"
+            style="color:#667085;font-size:14px;margin-top:4px;"
+          ></div>
+        </div>
+
+        <button
+          id="logoutButton"
+          class="logout-button"
+        >
+          Sair
+        </button>
+
+      </div>
+
+    </header>
+
+
+    <main class="container">
+
+      <div class="welcome">
+
+        <h1>
+          Dashboard
+        </h1>
+
+        <p>
+          Visão geral do sistema USDTMZ.
+        </p>
+
+      </div>
+
+
+      <div class="cards">
+
+        <div class="card">
+          <div class="card-title">
+            Total de pedidos
+          </div>
+
+          <div
+            id="totalOrders"
+            class="card-value"
+          >
+            0
+          </div>
+        </div>
+
+
+        <div class="card">
+          <div class="card-title">
+            Pedidos pendentes
+          </div>
+
+          <div
+            id="pendingOrders"
+            class="card-value"
+          >
+            0
+          </div>
+        </div>
+
+
+        <div class="card">
+          <div class="card-title">
+            Pagamentos confirmados
+          </div>
+
+          <div
+            id="confirmedPayments"
+            class="card-value"
+          >
+            0
+          </div>
+        </div>
+
+
+        <div class="card">
+          <div class="card-title">
+            Levantamentos
+          </div>
+
+          <div
+            id="totalWithdrawals"
+            class="card-value"
+          >
+            0
+          </div>
+        </div>
+
+
+       
