@@ -40,7 +40,7 @@
       background: white;
       border-radius: 16px;
       padding: 28px;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
     }
 
     .logo {
@@ -79,6 +79,11 @@
       font-weight: bold;
       cursor: pointer;
       margin-top: 20px;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
 
     .login-button {
@@ -156,7 +161,7 @@
       background: white;
       border-radius: 14px;
       padding: 20px;
-      box-shadow: 0 3px 15px rgba(0,0,0,0.05);
+      box-shadow: 0 3px 15px rgba(0, 0, 0, 0.05);
     }
 
     .card-title {
@@ -214,7 +219,10 @@
        LOGIN
   ========================================== -->
 
-  <section id="loginPage" class="login-page">
+  <section
+    id="loginPage"
+    class="login-page"
+  >
 
     <div class="login-card">
 
@@ -284,6 +292,7 @@
       <div class="header-content">
 
         <div>
+
           <div class="brand">
             USDTMZ — Administração
           </div>
@@ -292,6 +301,7 @@
             id="adminEmail"
             style="color:#667085;font-size:14px;margin-top:4px;"
           ></div>
+
         </div>
 
         <button
@@ -324,6 +334,7 @@
       <div class="cards">
 
         <div class="card">
+
           <div class="card-title">
             Total de pedidos
           </div>
@@ -334,10 +345,12 @@
           >
             0
           </div>
+
         </div>
 
 
         <div class="card">
+
           <div class="card-title">
             Pedidos pendentes
           </div>
@@ -348,10 +361,12 @@
           >
             0
           </div>
+
         </div>
 
 
         <div class="card">
+
           <div class="card-title">
             Pagamentos confirmados
           </div>
@@ -362,12 +377,14 @@
           >
             0
           </div>
+
         </div>
 
 
         <div class="card">
+
           <div class="card-title">
-            Levantamentos
+            Total de levantamentos
           </div>
 
           <div
@@ -376,7 +393,621 @@
           >
             0
           </div>
+
         </div>
 
 
-       
+        <div class="card">
+
+          <div class="card-title">
+            Levantamentos pendentes
+          </div>
+
+          <div
+            id="pendingWithdrawals"
+            class="card-value"
+          >
+            0
+          </div>
+
+        </div>
+
+
+        <div class="card">
+
+          <div class="card-title">
+            Transações
+          </div>
+
+          <div
+            id="totalTransactions"
+            class="card-value"
+          >
+            0
+          </div>
+
+        </div>
+
+
+        <div class="card">
+
+          <div class="card-title">
+            Saldo USDT da carteira
+          </div>
+
+          <div
+            id="walletBalance"
+            class="card-value"
+          >
+            0 USDT
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="section">
+
+        <h2>
+          Estado do sistema
+        </h2>
+
+        <div
+          id="systemStatus"
+          class="status"
+        >
+          Aguardando dados...
+        </div>
+
+      </div>
+
+    </main>
+
+  </section>
+
+
+  <!-- =========================================
+       SUPABASE JAVASCRIPT
+  ========================================== -->
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+
+  <script>
+
+    /*
+     * =========================================
+     * CLIENTE SUPABASE
+     * =========================================
+     */
+
+    let supabaseClient = null;
+
+
+    /*
+     * =========================================
+     * ELEMENTOS
+     * =========================================
+     */
+
+    const loginPage =
+      document.getElementById("loginPage");
+
+    const adminPage =
+      document.getElementById("adminPage");
+
+    const loginForm =
+      document.getElementById("loginForm");
+
+    const loginButton =
+      document.getElementById("loginButton");
+
+    const loginError =
+      document.getElementById("loginError");
+
+    const logoutButton =
+      document.getElementById("logoutButton");
+
+    const adminEmail =
+      document.getElementById("adminEmail");
+
+
+    /*
+     * =========================================
+     * CARREGAR CONFIGURAÇÃO DO SUPABASE
+     * =========================================
+     */
+
+    async function initializeSupabase() {
+
+      const response =
+        await fetch(
+          "/api/supabase-config",
+          {
+            method: "GET"
+          }
+        );
+
+
+      const result =
+        await response.json();
+
+
+      if (
+        !response.ok ||
+        !result.success ||
+        !result.supabase?.url ||
+        !result.supabase?.anonKey
+      ) {
+
+        throw new Error(
+          "Configuração do Supabase indisponível."
+        );
+
+      }
+
+
+      supabaseClient =
+        window.supabase.createClient(
+          result.supabase.url,
+          result.supabase.anonKey
+        );
+
+    }
+
+
+    /*
+     * =========================================
+     * ERRO DE LOGIN
+     * =========================================
+     */
+
+    function showLoginError(message) {
+
+      loginError.textContent =
+        message;
+
+      loginError.classList.remove(
+        "hidden"
+      );
+
+    }
+
+
+    function clearLoginError() {
+
+      loginError.textContent = "";
+
+      loginError.classList.add(
+        "hidden"
+      );
+
+    }
+
+
+    /*
+     * =========================================
+     * MOSTRAR LOGIN
+     * =========================================
+     */
+
+    function showLogin() {
+
+      loginPage.classList.remove(
+        "hidden"
+      );
+
+      adminPage.classList.add(
+        "hidden"
+      );
+
+    }
+
+
+    /*
+     * =========================================
+     * MOSTRAR DASHBOARD
+     * =========================================
+     */
+
+    function showDashboard() {
+
+      loginPage.classList.add(
+        "hidden"
+      );
+
+      adminPage.classList.remove(
+        "hidden"
+      );
+
+    }
+
+
+    /*
+     * =========================================
+     * LOGIN
+     * =========================================
+     */
+
+    loginForm.addEventListener(
+      "submit",
+      async function(event) {
+
+        event.preventDefault();
+
+        clearLoginError();
+
+        loginButton.disabled = true;
+
+        loginButton.textContent =
+          "Entrando...";
+
+
+        const email =
+          document
+            .getElementById("email")
+            .value
+            .trim();
+
+
+        const password =
+          document
+            .getElementById("password")
+            .value;
+
+
+        try {
+
+          const {
+            data,
+            error
+          } =
+            await supabaseClient.auth
+              .signInWithPassword({
+                email,
+                password
+              });
+
+
+          if (error) {
+            throw error;
+          }
+
+
+          if (!data?.session) {
+
+            throw new Error(
+              "Sessão não criada."
+            );
+
+          }
+
+
+          await verifyAdmin();
+
+        } catch (error) {
+
+          console.error(
+            "LOGIN_ERROR:",
+            error
+          );
+
+          showLoginError(
+            "Email ou palavra-passe incorretos."
+          );
+
+        } finally {
+
+          loginButton.disabled = false;
+
+          loginButton.textContent =
+            "Entrar";
+
+        }
+
+      }
+    );
+
+
+    /*
+     * =========================================
+     * VERIFICAR ADMIN
+     * =========================================
+     */
+
+    async function verifyAdmin() {
+
+      const {
+        data: sessionData
+      } =
+        await supabaseClient.auth
+          .getSession();
+
+
+      const session =
+        sessionData?.session;
+
+
+      if (!session) {
+
+        showLogin();
+
+        return false;
+
+      }
+
+
+      const response =
+        await fetch(
+          "/api/admin-me",
+          {
+            method: "GET",
+
+            headers: {
+              Authorization:
+                `Bearer ${session.access_token}`
+            }
+          }
+        );
+
+
+      const result =
+        await response.json();
+
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+
+        await supabaseClient.auth
+          .signOut();
+
+        throw new Error(
+          result?.error ||
+          "Acesso administrativo negado."
+        );
+
+      }
+
+
+      adminEmail.textContent =
+        result.admin.email;
+
+
+      showDashboard();
+
+
+      await loadDashboard(
+        session.access_token
+      );
+
+
+      return true;
+
+    }
+
+
+    /*
+     * =========================================
+     * CARREGAR DASHBOARD
+     * =========================================
+     */
+
+    async function loadDashboard(
+      accessToken
+    ) {
+
+      const systemStatus =
+        document.getElementById(
+          "systemStatus"
+        );
+
+
+      systemStatus.textContent =
+        "Carregando dados...";
+
+
+      try {
+
+        const response =
+          await fetch(
+            "/api/admin-dashboard",
+            {
+              method: "GET",
+
+              headers: {
+                Authorization:
+                  `Bearer ${accessToken}`
+              }
+            }
+          );
+
+
+        const result =
+          await response.json();
+
+
+        if (
+          !response.ok ||
+          !result.success
+        ) {
+
+          throw new Error(
+            result?.error ||
+            "Não foi possível carregar o dashboard."
+          );
+
+        }
+
+
+        const dashboard =
+          result.dashboard;
+
+
+        document.getElementById(
+          "totalOrders"
+        ).textContent =
+          dashboard.total_orders;
+
+
+        document.getElementById(
+          "pendingOrders"
+        ).textContent =
+          dashboard.pending_orders;
+
+
+        document.getElementById(
+          "confirmedPayments"
+        ).textContent =
+          dashboard.confirmed_payments;
+
+
+        document.getElementById(
+          "totalWithdrawals"
+        ).textContent =
+          dashboard.total_withdrawals;
+
+
+        document.getElementById(
+          "pendingWithdrawals"
+        ).textContent =
+          dashboard.pending_withdrawals;
+
+
+        document.getElementById(
+          "totalTransactions"
+        ).textContent =
+          dashboard.total_transactions;
+
+
+        document.getElementById(
+          "walletBalance"
+        ).textContent =
+          `${dashboard.wallet_usdt_balance} USDT`;
+
+
+        systemStatus.textContent =
+          "Sistema administrativo conectado.";
+
+      } catch (error) {
+
+        console.error(
+          "DASHBOARD_ERROR:",
+          error
+        );
+
+        systemStatus.textContent =
+          "Não foi possível carregar os dados do dashboard.";
+
+      }
+
+    }
+
+
+    /*
+     * =========================================
+     * LOGOUT
+     * =========================================
+     */
+
+    logoutButton.addEventListener(
+      "click",
+      async function() {
+
+        if (supabaseClient) {
+
+          await supabaseClient.auth
+            .signOut();
+
+        }
+
+        showLogin();
+
+      }
+    );
+
+
+    /*
+     * =========================================
+     * INICIALIZAR
+     * =========================================
+     */
+
+    async function initialize() {
+
+      try {
+
+        await initializeSupabase();
+
+
+        const {
+          data: sessionData
+        } =
+          await supabaseClient.auth
+            .getSession();
+
+
+        if (sessionData?.session) {
+
+          await verifyAdmin();
+
+        } else {
+
+          showLogin();
+
+        }
+
+      } catch (error) {
+
+        console.error(
+          "INITIALIZATION_ERROR:",
+          error
+        );
+
+        showLogin();
+
+        showLoginError(
+          "Não foi possível iniciar o sistema."
+        );
+
+      }
+
+    }
+
+
+    /*
+     * =========================================
+     * ALTERAÇÕES DE AUTENTICAÇÃO
+     * =========================================
+     */
+
+    async function handleAuthChange(
+      event
+    ) {
+
+      if (event === "SIGNED_OUT") {
+
+        showLogin();
+
+      }
+
+    }
+
+
+    supabaseClient = null;
+
+
+    /*
+     * =========================================
+     * INICIAR SISTEMA
+     * =========================================
+     */
+
+    initialize();
+
+  </script>
+
+</body>
+</html>
