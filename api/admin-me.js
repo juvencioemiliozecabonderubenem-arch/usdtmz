@@ -1,166 +1,235 @@
 // /api/admin-me.js
 //
 // USDTMZ — ADMIN ME
-// Verifica o utilizador autenticado no Supabase
-// e confirma se ele é administrador ativo.
+//
+// Verifica a sessão administrativa exclusivamente no NEON.
+//
+// FLUXO:
+//
+// Navegador
+//   ↓
+// Bearer session token
+//   ↓
+// SHA-256
+//   ↓
+// admin_sessions
+//   ↓
+// admin_users
+//   ↓
+// administrador ativo
+//
+// IMPORTANTE:
+// - Supabase NÃO é utilizado.
+// - Nenhum segredo fica neste arquivo.
+// - DATABASE_URL deve estar nas Environment Variables da Vercel.
+// - O token da sessão não é armazenado em texto puro.
+//
+
+import { neon } from "@neondatabase/serverless";
+import crypto from "node:crypto";
+
+
+/* =========================================================
+ * RESPOSTA JSON
+ * ========================================================= */
+
+function json(res, status, data) {
+  res.setHeader(
+    "Content-Type",
+    "application/json"
+  );
+
+  return res.status(status).json(data);
+}
+
+
+/* =========================================================
+ * HASH DA SESSÃO
+ * ========================================================= */
+
+function hashSessionToken(token) {
+  return crypto
+    .createHash("sha256")
+    .update(token, "utf8")
+    .digest("hex");
+}
+
+
+/* =========================================================
+ * HANDLER
+ * ========================================================= */
 
 export default async function handler(req, res) {
-  // ---------------------------------------------------------
-  // 1. MÉTODO
-  // ---------------------------------------------------------
+
+  /* =======================================================
+   * 1. MÉTODO
+   * ======================================================= */
+
   if (req.method !== "GET") {
-    return res.status(405).json({
+
+    res.setHeader(
+      "Allow",
+      "GET"
+    );
+
+    return json(res, 405, {
       success: false,
       error: "Método não permitido"
     });
   }
 
-  // ---------------------------------------------------------
-  // 2. CONFIGURAÇÃO SUPABASE
-  // ---------------------------------------------------------
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return res.status(500).json({
+  /* =======================================================
+   * 2. DATABASE
+   * ======================================================= */
+
+  const DATABASE_URL =
+    process.env.DATABASE_URL;
+
+  if (!DATABASE_URL) {
+
+    console.error(
+      "ADMIN-ME: DATABASE_URL não configurada."
+    );
+
+    return json(res, 500, {
       success: false,
-      error: "Supabase não configurado no servidor"
+      error: "DATABASE_URL não configurada"
     });
   }
 
-  // ---------------------------------------------------------
-  // 3. TOKEN DE AUTENTICAÇÃO
-  // ---------------------------------------------------------
-  const authorization = req.headers.authorization || "";
 
-  if (!authorization.startsWith("Bearer ")) {
-    return res.status(401).json({
+  /* =======================================================
+   * 3. TOKEN
+   * ======================================================= */
+
+  const authorization =
+    req.headers.authorization || "";
+
+  if (
+    !authorization.startsWith("Bearer ")
+  ) {
+
+    return json(res, 401, {
       success: false,
       error: "Token de autenticação não fornecido"
     });
   }
 
-  const accessToken = authorization.substring(7).trim();
 
-  if (!accessToken) {
-    return res.status(401).json({
+  const sessionToken =
+    authorization
+      .substring(7)
+      .trim();
+
+
+  if (!sessionToken) {
+
+    return json(res, 401, {
       success: false,
       error: "Token de autenticação inválido"
     });
   }
 
-  try {
-    // -------------------------------------------------------
-    // 4. VERIFICAR UTILIZADOR NO SUPABASE AUTH
-    // -------------------------------------------------------
-    const userResponse = await fetch(
-      `${SUPABASE_URL}/auth/v1/user`,
-      {
-        method: "GET",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${accessToken}`
-        }
-      }
+
+  /* =======================================================
+   * 4. HASH
+   * ======================================================= */
+
+  const tokenHash =
+    hashSessionToken(
+      sessionToken
     );
 
-    if (!userResponse.ok) {
-      return res.status(401).json({
+
+  try {
+
+    const sql =
+      neon(DATABASE_URL);
+
+
+    /* =====================================================
+     * 5. VALIDAR SESSÃO + ADMIN
+     * ===================================================== */
+
+    const sessions =
+      await sql`
+        SELECT
+          s.id AS session_id,
+          s.user_id,
+          s.expires_at,
+          s.created_at AS session_created_at,
+          u.email,
+          u.active,
+          u.created_at AS admin_created_at,
+          u.updated_at AS admin_updated_at
+        FROM admin_sessions s
+        INNER JOIN admin_users u
+          ON u.id = s.user_id
+        WHERE s.token_hash = ${tokenHash}
+          AND s.expires_at > NOW()
+          AND u.active = true
+        ORDER BY s.created_at DESC
+        LIMIT 1
+      `;
+
+
+    /* =====================================================
+     * 6. SESSÃO INVÁLIDA
+     * ===================================================== */
+
+    if (
+      sessions.length === 0
+    ) {
+
+      return json(res, 401, {
         success: false,
-        error: "Sessão inválida ou expirada"
+        error: "Sessão administrativa inválida ou expirada"
       });
     }
 
-    const user = await userResponse.json();
 
-    if (!user || !user.id) {
-      return res.status(401).json({
-        success: false,
-        error: "Utilizador não autenticado"
-      });
-    }
+    const admin =
+      sessions[0];
 
-    // -------------------------------------------------------
-    // 5. PROCURAR PERFIL ADMINISTRATIVO
-    // -------------------------------------------------------
-    const profileUrl =
-      `${SUPABASE_URL}/rest/v1/admin_profiles` +
-      `?select=id,email,role,active,created_at` +
-      `&id=eq.${encodeURIComponent(user.id)}` +
-      `&limit=1`;
 
-    const profileResponse = await fetch(profileUrl, {
-      method: "GET",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json"
-      }
-    });
+    /* =====================================================
+     * 7. RESPOSTA
+     * ===================================================== */
 
-    if (!profileResponse.ok) {
-      const errorText = await profileResponse.text();
+    return json(res, 200, {
 
-      console.error(
-        "Erro ao consultar admin_profiles:",
-        errorText
-      );
-
-      return res.status(500).json({
-        success: false,
-        error: "Não foi possível verificar o perfil administrativo"
-      });
-    }
-
-    const profiles = await profileResponse.json();
-
-    if (!Array.isArray(profiles) || profiles.length === 0) {
-      return res.status(403).json({
-        success: false,
-        error: "Utilizador não é administrador"
-      });
-    }
-
-    const profile = profiles[0];
-
-    // -------------------------------------------------------
-    // 6. VERIFICAR ROLE
-    // -------------------------------------------------------
-    if (profile.role !== "admin") {
-      return res.status(403).json({
-        success: false,
-        error: "Acesso administrativo não autorizado"
-      });
-    }
-
-    // -------------------------------------------------------
-    // 7. VERIFICAR SE O ADMIN ESTÁ ATIVO
-    // -------------------------------------------------------
-    if (profile.active !== true) {
-      return res.status(403).json({
-        success: false,
-        error: "Conta administrativa desativada"
-      });
-    }
-
-    // -------------------------------------------------------
-    // 8. RESPOSTA
-    // -------------------------------------------------------
-    return res.status(200).json({
       success: true,
+
       admin: {
-        id: profile.id,
-        email: profile.email,
-        role: profile.role,
-        active: profile.active,
-        created_at: profile.created_at
+
+        id:
+          Number(admin.user_id),
+
+        email:
+          admin.email,
+
+        role:
+          "admin",
+
+        active:
+          true,
+
+        created_at:
+          admin.admin_created_at
       }
     });
+
 
   } catch (error) {
-    console.error("ADMIN-ME ERROR:", error);
 
-    return res.status(500).json({
+    console.error(
+      "USDTMZ ADMIN-ME ERROR:",
+      error?.message ||
+      error
+    );
+
+    return json(res, 500, {
       success: false,
       error: "Erro interno do servidor"
     });
