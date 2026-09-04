@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USDTMZ — Login Admin</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f4f7fb;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+
+    .box {
+      width: 100%;
+      max-width: 420px;
+      background: white;
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.08);
+    }
+
+    h1 {
+      margin-top: 0;
+      text-align: center;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 25px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 7px;
+      font-weight: bold;
+    }
+
+    input {
+      width: 100%;
+      padding: 13px;
+      margin-bottom: 18px;
+      border: 1px solid #ccc;
+      border-radius: 9px;
+      font-size: 16px;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      border: 0;
+      border-radius: 9px;
+      background: #111827;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .6;
+      cursor: not-allowed;
+    }
+
+    #message {
+      margin-top: 18px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .back {
+      display: block;
+      margin-top: 20px;
+      text-align: center;
+      text-decoration: none;
+      color: #555;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="box">
+
+    <h1>USDTMZ</h1>
+
+    <div class="subtitle">
+      Área administrativa
+    </div>
+
+    <form id="loginForm">
+
+      <label for="email">Email</label>
+
+      <input
+        id="email"
+        type="email"
+        autocomplete="username"
+        placeholder="Email do administrador"
+        required
+      >
+
+      <label for="password">Senha</label>
+
+      <input
+        id="password"
+        type="password"
+        autocomplete="current-password"
+        placeholder="Senha"
+        required
+      >
+
+      <button id="loginButton" type="submit">
+        Entrar
+      </button>
+
+    </form>
+
+    <div id="message"></div>
+
+    <a class="back" href="/index.html">
+      Voltar para USDTMZ
+    </a>
+
+  </div>
+
+  <script>
+    const form = document.getElementById("loginForm");
+    const button = document.getElementById("loginButton");
+    const message = document.getElementById("message");
+
+    form.addEventListener("submit", async (event) => {
+
+      event.preventDefault();
+
+      message.textContent = "";
+      button.disabled = true;
+      button.textContent = "A entrar...";
+
+      const email =
+        document.getElementById("email").value.trim();
+
+      const password =
+        document.getElementById("password").value;
+
+      try {
+
+        const response = await fetch("/api/admin-login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            email,
+            password
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error || "Login recusado."
+          );
+        }
+
+        message.textContent =
+          "Login realizado. A entrar no painel...";
+
+        setTimeout(() => {
+          window.location.href = "/admin.html";
+        }, 500);
+
+      } catch (error) {
+
+        message.textContent =
+          error.message || "Erro no login.";
+
+        button.disabled = false;
+        button.textContent = "Entrar";
+      }
+
+    });
+  </script>
+
+</body>
+</html>
