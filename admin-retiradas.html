@@ -1,0 +1,1223 @@
+<!DOCTYPE html><html lang="pt">
+<head>
+  <meta charset="UTF-8"><meta
+name="viewport"
+content="width=device-width, initial-scale=1.0"
+
+«»
+
+  <title>USDTMZ — Administração de Retiradas</title>  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      color: #1f2937;
+    }
+
+    header {
+      background: #111827;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 25px;
+    }
+
+    header p {
+      margin: 7px 0 0;
+      font-size: 13px;
+      opacity: 0.8;
+    }
+
+    .container {
+      width: min(100%, 1100px);
+      margin: auto;
+      padding: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 18px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.07);
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 20px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(
+        auto-fit,
+        minmax(180px, 1fr)
+      );
+      gap: 15px;
+    }
+
+    .stat {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 15px;
+    }
+
+    .stat-title {
+      color: #6b7280;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .withdrawal {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 18px;
+      margin-top: 15px;
+      background: #fff;
+    }
+
+    .withdrawal.pending {
+      border-left: 5px solid #d97706;
+    }
+
+    .withdrawal.authorized {
+      border-left: 5px solid #2563eb;
+    }
+
+    .withdrawal.processing {
+      border-left: 5px solid #7c3aed;
+    }
+
+    .withdrawal.completed {
+      border-left: 5px solid #166534;
+    }
+
+    .withdrawal.rejected {
+      border-left: 5px solid #b91c1c;
+    }
+
+    .row {
+      margin-bottom: 10px;
+    }
+
+    .label {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 3px;
+    }
+
+    .value {
+      font-size: 15px;
+      font-weight: bold;
+      word-break: break-word;
+    }
+
+    .address {
+      font-family: monospace;
+      font-size: 13px;
+      word-break: break-all;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .status-PENDING {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-AUTHORIZED {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .status-PROCESSING {
+      background: #ede9fe;
+      color: #5b21b6;
+    }
+
+    .status-COMPLETED {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .status-REJECTED {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    button {
+      border: none;
+      border-radius: 9px;
+      padding: 12px 15px;
+      margin-top: 10px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .primary {
+      background: #2563eb;
+      color: white;
+    }
+
+    .danger {
+      background: #b91c1c;
+      color: white;
+    }
+
+    .secondary {
+      background: #374151;
+      color: white;
+    }
+
+    .warning {
+      background: #fef3c7;
+      color: #92400e;
+      padding: 14px;
+      border-radius: 9px;
+      margin-bottom: 15px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .result {
+      margin-top: 15px;
+      padding: 14px;
+      border-radius: 9px;
+      background: #f3f4f6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 14px;
+    }
+
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .ok {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 30px;
+      color: #6b7280;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    footer {
+      text-align: center;
+      padding: 25px;
+      color: #6b7280;
+      font-size: 12px;
+    }
+  </style></head><body><header>
+  <h1>USDTMZ — Administração</h1>
+  <p>Gestão de retiradas USDT TRON Mainnet</p>
+</header><div class="container">  <section class="card"><h2>Controle de retiradas</h2>
+
+<div class="warning">
+  <strong>Área administrativa.</strong><br>
+  As retiradas devem ser analisadas antes de qualquer
+  autorização. O cliente não pode aprovar a própria retirada.
+</div>
+
+<div class="grid">
+
+  <div class="stat">
+    <div class="stat-title">
+      Pendentes
+    </div>
+
+    <div
+      class="stat-value"
+      id="pendingCount"
+    >
+      0
+    </div>
+  </div>
+
+  <div class="stat">
+    <div class="stat-title">
+      Autorizadas
+    </div>
+
+    <div
+      class="stat-value"
+      id="authorizedCount"
+    >
+      0
+    </div>
+  </div>
+
+  <div class="stat">
+    <div class="stat-title">
+      Em processamento
+    </div>
+
+    <div
+      class="stat-value"
+      id="processingCount"
+    >
+      0
+    </div>
+  </div>
+
+  <div class="stat">
+    <div class="stat-title">
+      Concluídas
+    </div>
+
+    <div
+      class="stat-value"
+      id="completedCount"
+    >
+      0
+    </div>
+  </div>
+
+</div>
+
+<div class="top-actions">
+
+  <button
+    class="secondary"
+    id="refreshBtn"
+    onclick="loadWithdrawals()"
+  >
+    Atualizar retiradas
+  </button>
+
+</div>
+
+<div
+  id="pageResult"
+  class="result hidden"
+></div>
+
+  </section>  <section class="card"><h2>Retiradas</h2>
+
+<div
+  id="withdrawalsList"
+>
+  <div class="empty">
+    A carregar retiradas...
+  </div>
+</div>
+
+  </section></div><footer>
+  USDTMZ — Área administrativa — TRON Mainnet — USDT TRC-20
+</footer><script>
+
+  /*
+   * =======================================================
+   * CONFIGURAÇÃO
+   * =======================================================
+   *
+   * A API abaixo será criada na ETAPA 2.
+   *
+   * NÃO colocamos aqui nenhuma chave privada,
+   * senha ou segredo.
+   */
+
+  const CONFIG = {
+
+    /*
+     * Endpoint que iremos proteger no servidor.
+     *
+     * Por enquanto a página apenas está preparada
+     * para utilizar esta API.
+     */
+
+    apiWithdrawals:
+      "/api/withdrawals-admin"
+
+  };
+
+
+  /*
+   * =======================================================
+   * HELPERS
+   * =======================================================
+   */
+
+  function escapeHtml(value) {
+
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+  function showResult(
+    message,
+    type = ""
+  ) {
+
+    const element =
+      document.getElementById(
+        "pageResult"
+      );
+
+    element.className =
+      "result";
+
+    if (type) {
+      element.classList.add(type);
+    }
+
+    element.textContent =
+      message;
+
+    element.classList.remove(
+      "hidden"
+    );
+  }
+
+
+  function formatDate(value) {
+
+    if (!value) {
+      return "-";
+    }
+
+    const date =
+      new Date(value);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+
+      return String(value);
+    }
+
+    return date.toLocaleString(
+      "pt-MZ"
+    );
+  }
+
+
+  function normalizeStatus(
+    status
+  ) {
+
+    return String(
+      status || "PENDING"
+    )
+      .trim()
+      .toUpperCase();
+  }
+
+
+  /*
+   * =======================================================
+   * CONTADORES
+   * =======================================================
+   */
+
+  function updateCounters(
+    withdrawals
+  ) {
+
+    const counts = {
+
+      PENDING: 0,
+
+      AUTHORIZED: 0,
+
+      PROCESSING: 0,
+
+      COMPLETED: 0,
+
+      REJECTED: 0
+
+    };
+
+
+    withdrawals.forEach(
+      withdrawal => {
+
+        const status =
+          normalizeStatus(
+            withdrawal.status
+          );
+
+        if (
+          Object.prototype
+            .hasOwnProperty
+            .call(
+              counts,
+              status
+            )
+        ) {
+
+          counts[status]++;
+        }
+
+      }
+    );
+
+
+    document.getElementById(
+      "pendingCount"
+    ).textContent =
+      counts.PENDING;
+
+
+    document.getElementById(
+      "authorizedCount"
+    ).textContent =
+      counts.AUTHORIZED;
+
+
+    document.getElementById(
+      "processingCount"
+    ).textContent =
+      counts.PROCESSING;
+
+
+    document.getElementById(
+      "completedCount"
+    ).textContent =
+      counts.COMPLETED;
+  }
+
+
+  /*
+   * =======================================================
+   * API
+   * =======================================================
+   */
+
+  async function apiFetch(
+    url,
+    options = {}
+  ) {
+
+    const response =
+      await fetch(
+        url,
+        {
+          ...options,
+
+          credentials:
+            "include",
+
+          headers: {
+
+            "Content-Type":
+              "application/json",
+
+            ...(options.headers || {})
+
+          }
+        }
+      );
+
+
+    let data = null;
+
+    try {
+
+      data =
+        await response.json();
+
+    } catch {
+
+      data = null;
+
+    }
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        data?.error ||
+        "Erro na comunicação com o servidor."
+      );
+    }
+
+
+    return data;
+  }
+
+
+  /*
+   * =======================================================
+   * RENDERIZAR RETIRADAS
+   * =======================================================
+   */
+
+  function renderWithdrawals(
+    withdrawals
+  ) {
+
+    const container =
+      document.getElementById(
+        "withdrawalsList"
+      );
+
+
+    if (
+      !Array.isArray(
+        withdrawals
+      ) ||
+      withdrawals.length === 0
+    ) {
+
+      container.innerHTML = `
+        <div class="empty">
+          Nenhuma retirada encontrada.
+        </div>
+      `;
+
+      updateCounters([]);
+
+      return;
+    }
+
+
+    updateCounters(
+      withdrawals
+    );
+
+
+    container.innerHTML =
+      withdrawals
+        .map(
+          withdrawal =>
+            renderWithdrawal(
+              withdrawal
+            )
+        )
+        .join("");
+  }
+
+
+  function renderWithdrawal(
+    withdrawal
+  ) {
+
+    const status =
+      normalizeStatus(
+        withdrawal.status
+      );
+
+
+    const withdrawalId =
+      escapeHtml(
+        withdrawal.withdrawal_id
+      );
+
+
+    const address =
+      escapeHtml(
+        withdrawal.destination_address ||
+        withdrawal.address ||
+        "-"
+      );
+
+
+    const amount =
+      escapeHtml(
+        withdrawal.amount ||
+        "0"
+      );
+
+
+    const network =
+      escapeHtml(
+        withdrawal.network ||
+        "TRON Mainnet"
+      );
+
+
+    const asset =
+      escapeHtml(
+        withdrawal.asset ||
+        "USDT"
+      );
+
+
+    const standard =
+      escapeHtml(
+        withdrawal.standard ||
+        "TRC-20"
+      );
+
+
+    const createdAt =
+      escapeHtml(
+        formatDate(
+          withdrawal.created_at
+        )
+      );
+
+
+    const userId =
+      escapeHtml(
+        withdrawal.user_id ||
+        "-"
+      );
+
+
+    let actions = "";
+
+
+    if (
+      status === "PENDING"
+    ) {
+
+      actions = `
+
+        <button
+          class="primary"
+          onclick="authorizeWithdrawal('${escapeJs(withdrawal.withdrawal_id)}')"
+        >
+          Aprovar retirada
+        </button>
+
+        <button
+          class="danger"
+          onclick="rejectWithdrawal('${escapeJs(withdrawal.withdrawal_id)}')"
+        >
+          Rejeitar
+        </button>
+
+      `;
+    }
+
+
+    if (
+      status === "AUTHORIZED"
+    ) {
+
+      actions = `
+
+        <button
+          class="primary"
+          onclick="processWithdrawal('${escapeJs(withdrawal.withdrawal_id)}')"
+        >
+          Processar retirada
+        </button>
+
+      `;
+    }
+
+
+    return `
+
+      <div class="withdrawal ${status.toLowerCase()}">
+
+        <div class="row">
+
+          <div class="label">
+            Estado
+          </div>
+
+          <span class="status status-${status}">
+            ${status}
+          </span>
+
+        </div>
+
+
+        <div class="row">
+
+          <div class="label">
+            ID da retirada
+          </div>
+
+          <div class="value">
+            ${withdrawalId}
+          </div>
+
+        </div>
+
+
+        <div class="row">
+
+          <div class="label">
+            Cliente / utilizador
+          </div>
+
+          <div class="value">
+            ${userId}
+          </div>
+
+        </div>
+
+
+        <div class="row">
+
+          <div class="label">
+            Valor
+          </div>
+
+          <div class="value">
+            ${amount} ${asset}
+          </div>
+
+        </div>
+
+
+        <div class="row">
+
+          <div class="label">
+            Endereço de destino
+          </div>
+
+          <div class="value address">
+            ${address}
+          </div>
+
+        </div>
+
+
+        <div class="row">
+
+          <div class="label">
+            Rede
+          </div>
+
+          <div class="value">
+            ${network}
+          </div>
+
+        </div>
+
+
+        <div class="row">
+
+          <div class="label">
+            Standard
+          </div>
+
+          <div class="value">
+            ${standard}
+          </div>
+
+        </div>
+
+
+        <div class="row">
+
+          <div class="label">
+            Criada em
+          </div>
+
+          <div class="value">
+            ${createdAt}
+          </div>
+
+        </div>
+
+
+        <div class="actions">
+
+          ${actions}
+
+        </div>
+
+      </div>
+
+    `;
+  }
+
+
+  function escapeJs(
+    value
+  ) {
+
+    return String(value ?? "")
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'");
+  }
+
+
+  /*
+   * =======================================================
+   * CARREGAR RETIRADAS
+   * =======================================================
+   */
+
+  async function loadWithdrawals() {
+
+    const button =
+      document.getElementById(
+        "refreshBtn"
+      );
+
+
+    button.disabled =
+      true;
+
+    button.textContent =
+      "A atualizar...";
+
+
+    try {
+
+      const data =
+        await apiFetch(
+          CONFIG.apiWithdrawals,
+          {
+            method: "GET"
+          }
+        );
+
+
+      if (
+        !data?.success
+      ) {
+
+        throw new Error(
+          data?.error ||
+          "Não foi possível carregar as retiradas."
+        );
+      }
+
+
+      const withdrawals =
+        Array.isArray(
+          data.withdrawals
+        )
+          ? data.withdrawals
+          : [];
+
+
+      renderWithdrawals(
+        withdrawals
+      );
+
+
+      showResult(
+        "Retiradas atualizadas com sucesso.",
+        "ok"
+      );
+
+
+    } catch (error) {
+
+      console.error(
+        "USDTMZ ADMIN WITHDRAWALS:",
+        error
+      );
+
+
+      showResult(
+        error.message ||
+        "Não foi possível carregar as retiradas.",
+        "error"
+      );
+
+
+      document.getElementById(
+        "withdrawalsList"
+      ).innerHTML = `
+
+        <div class="empty">
+          Não foi possível carregar as retiradas.
+        </div>
+
+      `;
+
+    } finally {
+
+      button.disabled =
+        false;
+
+      button.textContent =
+        "Atualizar retiradas";
+    }
+  }
+
+
+  /*
+   * =======================================================
+   * APROVAR
+   * =======================================================
+   *
+   * IMPORTANTE:
+   * Esta função chama uma API que ainda vamos criar.
+   *
+   * A autorização REAL deve ser feita no servidor.
+   */
+
+  async function authorizeWithdrawal(
+    withdrawalId
+  ) {
+
+    const confirmed =
+      window.confirm(
+        "Tem certeza que deseja APROVAR esta retirada?"
+      );
+
+
+    if (!confirmed) {
+      return;
+    }
+
+
+    try {
+
+      const data =
+        await apiFetch(
+          CONFIG.apiWithdrawals,
+          {
+            method: "POST",
+
+            body:
+              JSON.stringify({
+
+                action:
+                  "authorize",
+
+                withdrawal_id:
+                  withdrawalId
+
+              })
+          }
+        );
+
+
+      if (
+        !data?.success
+      ) {
+
+        throw new Error(
+          data?.error ||
+          "Não foi possível aprovar a retirada."
+        );
+      }
+
+
+      showResult(
+        "Retirada autorizada com sucesso.",
+        "ok"
+      );
+
+
+      await loadWithdrawals();
+
+
+    } catch (error) {
+
+      showResult(
+        error.message ||
+        "Erro ao autorizar retirada.",
+        "error"
+      );
+    }
+  }
+
+
+  /*
+   * =======================================================
+   * REJEITAR
+   * =======================================================
+   */
+
+  async function rejectWithdrawal(
+    withdrawalId
+  ) {
+
+    const confirmed =
+      window.confirm(
+        "Tem certeza que deseja REJEITAR esta retirada?"
+      );
+
+
+    if (!confirmed) {
+      return;
+    }
+
+
+    try {
+
+      const data =
+        await apiFetch(
+          CONFIG.apiWithdrawals,
+          {
+            method: "POST",
+
+            body:
+              JSON.stringify({
+
+                action:
+                  "reject",
+
+                withdrawal_id:
+                  withdrawalId
+
+              })
+          }
+        );
+
+
+      if (
+        !data?.success
+      ) {
+
+        throw new Error(
+          data?.error ||
+          "Não foi possível rejeitar a retirada."
+        );
+      }
+
+
+      showResult(
+        "Retirada rejeitada.",
+        "ok"
+      );
+
+
+      await loadWithdrawals();
+
+
+    } catch (error) {
+
+      showResult(
+        error.message ||
+        "Erro ao rejeitar retirada.",
+        "error"
+      );
+    }
+  }
+
+
+  /*
+   * =======================================================
+   * PROCESSAR
+   * =======================================================
+   *
+   * Esta ação só deverá funcionar para uma retirada
+   * que já esteja AUTHORIZED.
+   *
+   * A API do servidor será responsável por verificar
+   * novamente o estado antes de enviar qualquer USDT.
+   */
+
+  async function processWithdrawal(
+    withdrawalId
+  ) {
+
+    const confirmed =
+      window.confirm(
+        "ATENÇÃO: esta ação poderá iniciar o envio real de USDT na TRON. Deseja continuar?"
+      );
+
+
+    if (!confirmed) {
+      return;
+    }
+
+
+    try {
+
+      const data =
+        await apiFetch(
+          "/api/process-withdrawal",
+          {
+            method: "POST",
+
+            body:
+              JSON.stringify({
+
+                withdrawal_id:
+                  withdrawalId
+
+              })
+          }
+        );
+
+
+      if (
+        !data?.success
+      ) {
+
+        throw new Error(
+          data?.error ||
+          "Não foi possível processar a retirada."
+        );
+      }
+
+
+      showResult(
+        "Processamento iniciado. Verifique o estado da transação.",
+        "ok"
+      );
+
+
+      await loadWithdrawals();
+
+
+    } catch (error) {
+
+      showResult(
+        error.message ||
+        "Erro ao processar retirada.",
+        "error"
+      );
+    }
+  }
+
+
+  /*
+   * =======================================================
+   * INICIALIZAÇÃO
+   * =======================================================
+   */
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+
+      loadWithdrawals();
+
+    }
+  );
+
+</script></body>
+</html>
