@@ -1,18 +1,53 @@
 import { neon } from "@neondatabase/serverless";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  createHmac,
+  timingSafeEqual,
+  randomBytes
+} from "node:crypto";
 
 const RATE = 50;
 const MIN_AMOUNT_MZN = 20;
 const MAX_AMOUNT_MZN = 40000;
+
+const ADMIN_COOKIE_NAME = "usdtmz_admin_session";
+
+/*
+ * =========================================================
+ * USDTMZ — ORDER API
+ *
+ * DATABASE:
+ *   Neon PostgreSQL
+ *
+ * IMPORTANTE:
+ *   A simulação NÃO movimenta dinheiro real.
+ *   A simulação só pode ser ativada através de:
+ *
+ *   USDTMZ_SIMULATION_MODE=true
+ *
+ * Quando desligado:
+ *
+ *   pedido -> PENDING
+ *
+ * Quando ligado:
+ *
+ *   pedido
+ *      ↓
+ *   pagamento SIMULADO
+ *      ↓
+ *   saldo SIMULADO no Neon
+ *
+ * Nenhuma transação blockchain é executada aqui.
+ * =========================================================
+ */
 
 function json(res, status, data) {
   res.setHeader("Content-Type", "application/json");
   return res.status(status).json(data);
 }
 
-/* =========================
-   SESSÃO ADMIN
-========================= */
+/* =========================================================
+   COOKIE
+========================================================= */
 
 function getCookie(req, name) {
   const header = req.headers.cookie || "";
@@ -24,7 +59,9 @@ function getCookie(req, name) {
   for (const cookie of cookies) {
     const index = cookie.indexOf("=");
 
-    if (index === -1) continue;
+    if (index === -1) {
+      continue;
+    }
 
     const key = cookie.slice(0, index);
     const value = cookie.slice(index + 1);
@@ -37,6 +74,10 @@ function getCookie(req, name) {
   return null;
 }
 
+/* =========================================================
+   SESSÃO ADMIN
+========================================================= */
+
 function verifyAdminSession(req) {
   const secret = process.env.ADMIN_SESSION_SECRET;
 
@@ -46,7 +87,7 @@ function verifyAdminSession(req) {
 
   const token = getCookie(
     req,
-    "usdtmz_admin_session"
+    ADMIN_COOKIE_NAME
   );
 
   if (!token) {
@@ -104,19 +145,22 @@ function verifyAdminSession(req) {
       return null;
     }
 
-    if (Date.now() >= Number(payload.exp)) {
+    if (
+      Date.now() >= Number(payload.exp)
+    ) {
       return null;
     }
 
     return payload;
+
   } catch {
     return null;
   }
 }
 
-/* =========================
-   GET — ADMIN
-========================= */
+/* =========================================================
+   GET — LISTAR PEDIDOS
+========================================================= */
 
 async function getOrders(req, res, sql) {
   const admin = verifyAdminSession(req);
@@ -161,33 +205,185 @@ async function getOrders(req, res, sql) {
   });
 }
 
-/* =========================
-   VALIDAR TELEFONE
-========================= */
+/* =========================================================
+   TELEFONE
+========================================================= */
 
 function isValidPhone(phone) {
   return /^\d{9}$/.test(phone);
 }
 
-/* =========================
+/* =========================================================
+   ID DO PEDIDO
+========================================================= */
+
+function createOrderId() {
+  const randomPart = randomBytes(4)
+    .toString("hex")
+    .toUpperCase();
+
+  return (
+    "USDTMZ-" +
+    Date.now()
+      .toString(36)
+      .toUpperCase() +
+    "-" +
+    randomPart
+  );
+}
+
+/* =========================================================
+   MODO SIMULAÇÃO
+========================================================= */
+
+function isSimulationMode() {
+  return (
+    String(
+      process.env.USDTMZ_SIMULATION_MODE || ""
+    )
+      .trim()
+      .toLowerCase() === "true"
+  );
+}
+
+/* =========================================================
+   CRIAR / ATUALIZAR SALDO SIMULADO
+========================================================= */
+
+async function creditSimulationBalance(
+  sql,
+  userId,
+  usdtAmount
+) {
+  /*
+   * O user_id usado na simulação é o telefone.
+   *
+   * Isto é apenas para a etapa de teste.
+   */
+
+  const existing = await sql`
+    SELECT
+      id,
+      user_id,
+      usdt_balance
+    FROM balances
+    WHERE user_id = ${userId}
+    LIMIT 1
+  `;
+
+  if (existing.length > 0) {
+    const currentBalance =
+      Number(existing[0].usdt_balance || 0);
+
+    const newBalance =
+      currentBalance + usdtAmount;
+
+    const updated = await sql`
+      UPDATE balances
+
+      SET
+        usdt_balance = ${newBalance},
+        updated_at = NOW()
+
+      WHERE id = ${existing[0].id}
+
+      RETURNING
+        id,
+        user_id,
+        usdt_balance,
+        updated_at
+    `;
+
+    return updated[0];
+  }
+
+  const created = await sql`
+    INSERT INTO balances (
+      user_id,
+      usdt_balance,
+      created_at,
+      updated_at
+    )
+
+    VALUES (
+      ${userId},
+      ${usdtAmount},
+      NOW(),
+      NOW()
+    )
+
+    RETURNING
+      id,
+      user_id,
+      usdt_balance,
+      updated_at
+  `;
+
+  return created[0];
+}
+
+/* =========================================================
+   TRANSAÇÃO SIMULADA
+========================================================= */
+
+async function createSimulationTransaction(
+  sql,
+  userId,
+  orderId,
+  usdtAmount
+) {
+  /*
+   * Registra a entrada SIMULADA no ledger.
+   *
+   * Não existe blockchain envolvida.
+   */
+
+  const reference =
+    `SIMULATION-${orderId}`;
+
+  const result = await sql`
+    INSERT INTO transactions (
+      user_id,
+      type,
+      asset,
+      amount,
+      status,
+      reference,
+      blockchain_tx_hash,
+      created_at
+    )
+
+    VALUES (
+      ${userId},
+      'SIMULATED_DEPOSIT',
+      'USDT',
+      ${usdtAmount},
+      'SIMULATED',
+      ${reference},
+      NULL,
+      NOW()
+    )
+
+    RETURNING
+      id,
+      user_id,
+      type,
+      asset,
+      amount,
+      status,
+      reference,
+      created_at
+  `;
+
+  return result[0];
+}
+
+/* =========================================================
    POST — CRIAR PEDIDO
-========================= */
+========================================================= */
 
 async function createOrder(req, res, sql) {
   const body = req.body || {};
-
-  /*
-   * O frontend pode enviar:
-   *
-   * phone
-   * payment_method
-   * operation
-   * name
-   * amount_mzn
-   *
-   * Mas o servidor é quem calcula
-   * o valor USDT.
-   */
 
   const phone = String(
     body.phone || ""
@@ -216,9 +412,9 @@ async function createOrder(req, res, sql) {
     body.amount ??
     body.amountMzn;
 
-  /* =========================
+  /* =======================================================
      TELEFONE
-  ========================= */
+  ======================================================= */
 
   if (!phone) {
     return json(res, 400, {
@@ -236,11 +432,13 @@ async function createOrder(req, res, sql) {
     });
   }
 
-  /* =========================
+  /* =======================================================
      PAGAMENTO
-  ========================= */
+  ======================================================= */
 
-  if (!["mpesa", "emola"].includes(payment)) {
+  if (
+    !["mpesa", "emola"].includes(payment)
+  ) {
     return json(res, 400, {
       success: false,
       error:
@@ -248,9 +446,9 @@ async function createOrder(req, res, sql) {
     });
   }
 
-  /* =========================
+  /* =======================================================
      OPERAÇÃO
-  ========================= */
+  ======================================================= */
 
   if (operation !== "buy") {
     return json(res, 400, {
@@ -260,9 +458,9 @@ async function createOrder(req, res, sql) {
     });
   }
 
-  /* =========================
+  /* =======================================================
      VALOR
-  ========================= */
+  ======================================================= */
 
   if (
     amountInput === undefined ||
@@ -277,10 +475,6 @@ async function createOrder(req, res, sql) {
   }
 
   const amount = Number(amountInput);
-
-  /*
-   * Pagar exige valor inteiro em MZN.
-   */
 
   if (!Number.isSafeInteger(amount)) {
     return json(res, 400, {
@@ -306,13 +500,17 @@ async function createOrder(req, res, sql) {
     });
   }
 
-  /* =========================
+  /* =======================================================
      CÁLCULO USDT
-  ========================= */
+  ======================================================= */
 
-  const usdtAmount = amount / RATE;
+  const usdtAmount =
+    amount / RATE;
 
-  if (!Number.isFinite(usdtAmount)) {
+  if (
+    !Number.isFinite(usdtAmount) ||
+    usdtAmount <= 0
+  ) {
     return json(res, 400, {
       success: false,
       error:
@@ -320,21 +518,38 @@ async function createOrder(req, res, sql) {
     });
   }
 
-  /* =========================
-     ID DO PEDIDO
-  ========================= */
+  /* =======================================================
+     ID
+  ======================================================= */
 
   const orderId =
-    "USDTMZ-" +
-    Date.now()
-      .toString(36)
-      .toUpperCase() +
-    "-" +
-    cryptoRandomPart();
+    createOrderId();
 
-  /* =========================
-     INSERT
-  ========================= */
+  /* =======================================================
+     STATUS INICIAL
+  ======================================================= */
+
+  const simulation =
+    isSimulationMode();
+
+  /*
+   * Sem simulação:
+   *
+   * PENDING
+   *
+   * Com simulação:
+   *
+   * SIMULATED_PAID
+   */
+
+  const initialStatus =
+    simulation
+      ? "SIMULATED_PAID"
+      : "PENDING";
+
+  /* =======================================================
+     CRIAR PEDIDO
+  ======================================================= */
 
   const result = await sql`
     INSERT INTO orders (
@@ -358,7 +573,7 @@ async function createOrder(req, res, sql) {
       ${amount},
       ${usdtAmount},
       ${RATE},
-      'PENDING'
+      ${initialStatus}
     )
 
     RETURNING
@@ -377,56 +592,122 @@ async function createOrder(req, res, sql) {
 
   const order = result[0];
 
+  /* =======================================================
+     SIMULAÇÃO
+  ======================================================= */
+
+  let simulatedBalance = null;
+  let simulatedTransaction = null;
+
+  if (simulation) {
+
+    /*
+     * 1. Credita saldo SIMULADO.
+     */
+
+    simulatedBalance =
+      await creditSimulationBalance(
+        sql,
+        phone,
+        usdtAmount
+      );
+
+    /*
+     * 2. Registra movimento SIMULADO.
+     */
+
+    simulatedTransaction =
+      await createSimulationTransaction(
+        sql,
+        phone,
+        orderId,
+        usdtAmount
+      );
+  }
+
+  /* =======================================================
+     RESPOSTA
+  ======================================================= */
+
   return json(res, 201, {
     success: true,
 
-    message:
-      "Pedido criado com sucesso.",
+    simulation,
+
+    message: simulation
+      ? "Pedido criado e pagamento simulado confirmado."
+      : "Pedido criado com sucesso.",
 
     order: {
       id: order.id,
 
-      order_id: order.order_id,
+      order_id:
+        order.order_id,
 
-      name: order.name,
+      name:
+        order.name,
 
-      phone: order.phone,
+      phone:
+        order.phone,
 
-      operation: order.operation,
+      operation:
+        order.operation,
 
-      payment: order.payment,
+      payment:
+        order.payment,
 
-      amount: Number(order.amount),
+      amount:
+        Number(order.amount),
 
       usdt_amount:
-        Number(order.usdt_amount).toFixed(6),
+        Number(
+          order.usdt_amount
+        ).toFixed(6),
 
-      rate: Number(order.rate),
+      rate:
+        Number(order.rate),
 
-      status: order.status,
+      status:
+        order.status,
 
-      created_at: order.created_at
-    }
+      created_at:
+        order.created_at
+    },
+
+    simulated: simulation
+      ? {
+          payment_status:
+            "SIMULATED_PAID",
+
+          usdt_credited:
+            Number(usdtAmount)
+              .toFixed(6),
+
+          balance:
+            Number(
+              simulatedBalance.usdt_balance
+            ).toFixed(6),
+
+          transaction:
+            simulatedTransaction
+        }
+      : null
   });
 }
 
-/* =========================
-   ID ALEATÓRIO
-========================= */
-
-function cryptoRandomPart() {
-  return Math.random()
-    .toString(36)
-    .slice(2, 8)
-    .toUpperCase();
-}
-
-/* =========================
+/* =========================================================
    HANDLER
-========================= */
+========================================================= */
 
-export default async function handler(req, res) {
-  if (!["GET", "POST"].includes(req.method)) {
+export default async function handler(
+  req,
+  res
+) {
+  if (
+    !["GET", "POST"].includes(
+      req.method
+    )
+  ) {
     return json(res, 405, {
       success: false,
       error:
@@ -443,6 +724,7 @@ export default async function handler(req, res) {
   }
 
   try {
+
     const sql = neon(
       process.env.DATABASE_URL
     );
@@ -462,6 +744,7 @@ export default async function handler(req, res) {
     );
 
   } catch (error) {
+
     console.error(
       "USDTMZ ORDER ERROR:",
       error?.message || error
