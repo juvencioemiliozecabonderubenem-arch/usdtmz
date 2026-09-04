@@ -1,0 +1,330 @@
+<!DOCTYPE html><html lang="pt">
+<head>
+  <meta charset="UTF-8"><meta
+name="viewport"
+content="width=device-width, initial-scale=1.0"
+
+«»
+
+  <title>USDTMZ — Painel Administrativo</title>  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      color: #1f2937;
+    }
+
+    header {
+      background: #111827;
+      color: white;
+      padding: 22px 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 26px;
+    }
+
+    header p {
+      margin: 7px 0 0;
+      font-size: 13px;
+      opacity: 0.8;
+    }
+
+    .container {
+      width: min(100%, 1000px);
+      margin: auto;
+      padding: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 18px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.07);
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 20px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns:
+        repeat(auto-fit, minmax(210px, 1fr));
+      gap: 15px;
+    }
+
+    .menu {
+      display: grid;
+      grid-template-columns:
+        repeat(auto-fit, minmax(220px, 1fr));
+      gap: 15px;
+    }
+
+    .menu a {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .menu-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 20px;
+      background: #f9fafb;
+      transition: 0.15s;
+    }
+
+    .menu-card:hover {
+      transform: translateY(-2px);
+      box-shadow:
+        0 5px 15px rgba(0, 0, 0, 0.08);
+    }
+
+    .menu-icon {
+      font-size: 30px;
+      margin-bottom: 10px;
+    }
+
+    .menu-title {
+      font-size: 17px;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    .menu-description {
+      color: #6b7280;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .stat {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 15px;
+    }
+
+    .stat-title {
+      color: #6b7280;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .security {
+      background: #fef3c7;
+      color: #92400e;
+      padding: 15px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .result {
+      margin-top: 15px;
+      padding: 14px;
+      border-radius: 9px;
+      background: #f3f4f6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 14px;
+    }
+
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .ok {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    button {
+      border: none;
+      border-radius: 9px;
+      padding: 13px 18px;
+      margin-top: 12px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #374151;
+      color: white;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    footer {
+      text-align: center;
+      padding: 25px;
+      color: #6b7280;
+      font-size: 12px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style></head><body><header>
+  <h1>USDTMZ</h1>
+  <p>Painel Administrativo</p>
+</header><div class="container">  <!-- =====================================================
+       ESTADO DO ADMIN
+  ====================================================== -->  <section class="card"><h2>Administrador</h2>
+
+<div class="grid">
+
+  <div class="stat">
+
+    <div class="stat-title">
+      Área
+    </div>
+
+    <div class="stat-value">
+      Administração
+    </div>
+
+  </div>
+
+  <div class="stat">
+
+    <div class="stat-title">
+      Rede
+    </div>
+
+    <div class="stat-value">
+      TRON Mainnet
+    </div>
+
+  </div>
+
+  <div class="stat">
+
+    <div class="stat-title">
+      Ativo
+    </div>
+
+    <div class="stat-value">
+      USDT
+    </div>
+
+  </div>
+
+</div>
+
+  </section>  <!-- =====================================================
+       MENU ADMINISTRATIVO
+  ====================================================== -->  <section class="card"><h2>Menu</h2>
+
+<div class="menu">
+
+  <a href="/admin-retiradas.html">
+
+    <div class="menu-card">
+
+      <div class="menu-icon">
+        💸
+      </div>
+
+      <div class="menu-title">
+        Retiradas
+      </div>
+
+      <div class="menu-description">
+        Ver pedidos de retirada, analisar,
+        aprovar ou rejeitar solicitações.
+      </div>
+
+    </div>
+
+  </a>
+
+
+  <a href="/index.html">
+
+    <div class="menu-card">
+
+      <div class="menu-icon">
+        🛒
+      </div>
+
+      <div class="menu-title">
+        Área do cliente
+      </div>
+
+      <div class="menu-description">
+        Abrir a página principal do USDTMZ.
+      </div>
+
+    </div>
+
+  </a>
+
+</div>
+
+  </section>  <!-- =====================================================
+       SEGURANÇA
+  ====================================================== -->  <section class="card"><h2>Segurança</h2>
+
+<div class="security">
+
+  <strong>Importante</strong>
+
+  <p>
+    Este painel não deve guardar chaves privadas,
+    credenciais da Pagar ou chaves da TRONGrid
+    no navegador.
+  </p>
+
+  <p>
+    A autorização de uma retirada deve ser feita
+    exclusivamente pelo servidor.
+  </p>
+
+  <p>
+    O envio de USDT deve ocorrer somente depois
+    que a retirada estiver no estado AUTHORIZED.
+  </p>
+
+</div>
+
+  </section>  <!-- =====================================================
+       INFORMAÇÕES
+  ====================================================== -->  <section class="card"><h2>Fluxo das retiradas</h2>
+
+<div class="result">
+
+PENDING
+↓
+Análise administrativa
+↓
+AUTHORIZED
+↓
+Processamento TRON
+↓
+PROCESSING
+↓
+Confirmação on-chain
+↓
+COMPLETED
+
+</div>
+
+  </section></div><footer>
+  USDTMZ — Painel Administrativo
+</footer></body>
+</html>
