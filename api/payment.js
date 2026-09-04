@@ -1,49 +1,117 @@
 // /api/payment.js
 //
-// USDTMZ — INICIAR PAGAMENTO PAGAR
-// POST /api/payment
+// USDTMZ — INICIAR PAGAMENTO
+//
+// MODO SIMULAÇÃO:
+//   pedido -> pagamento simulado
+//
+// MODO NORMAL:
+//   pedido -> Pagar
 //
 // IMPORTANTE:
-// - As credenciais ficam somente nas Environment Variables da Vercel.
-// - Este endpoint NÃO confirma o pagamento.
-// - A confirmação final é feita pelo /api/pagar-webhook.js.
+// - A simulação não chama a Pagar.
+// - A simulação não movimenta dinheiro.
+// - A simulação não movimenta blockchain.
+// - Credenciais ficam somente nas Environment Variables.
+//
 
 import { neon } from "@neondatabase/serverless";
 import crypto from "node:crypto";
-
-const sql = neon(process.env.DATABASE_URL);
 
 const API_BASE_URL =
   process.env.PAGAR_API_BASE_URL ||
   "https://api.pagar.co.mz/api/v1";
 
-const API_KEY = process.env.PAGAR_API_KEY;
-const SIGNING_SECRET = process.env.PAGAR_SIGNING_SECRET;
+const API_KEY =
+  process.env.PAGAR_API_KEY;
+
+const SIGNING_SECRET =
+  process.env.PAGAR_SIGNING_SECRET;
 
 const MIN_AMOUNT_MZN = 20;
 const MAX_AMOUNT_MZN = 40000;
 
-function json(res, status, data) {
-  return res.status(status).json(data);
-}
+/* =========================================================
+   DATABASE
+========================================================= */
 
-function safeBaseUrl() {
-  try {
-    const url = new URL(API_BASE_URL);
-
-    return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
-  } catch {
-    return "URL_INVALIDA";
+function getSql() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error(
+      "DATABASE_URL não configurada."
+    );
   }
+
+  return neon(
+    process.env.DATABASE_URL
+  );
 }
+
+/* =========================================================
+   JSON
+========================================================= */
+
+function json(res, status, data) {
+  res.setHeader(
+    "Content-Type",
+    "application/json"
+  );
+
+  return res
+    .status(status)
+    .json(data);
+}
+
+/* =========================================================
+   SIMULAÇÃO
+========================================================= */
+
+function isSimulationMode() {
+  return (
+    String(
+      process.env.USDTMZ_SIMULATION_MODE || ""
+    )
+      .trim()
+      .toLowerCase() === "true"
+  );
+}
+
+/* =========================================================
+   VALIDAÇÕES
+========================================================= */
 
 function isValidPhone(phone) {
   return /^\d{9}$/.test(phone);
 }
 
 function isValidMethod(method) {
-  return method === "MPESA" || method === "EMOLA";
+  return (
+    method === "MPESA" ||
+    method === "EMOLA"
+  );
 }
+
+/* =========================================================
+   URL PAGAR
+========================================================= */
+
+function safeBaseUrl() {
+  try {
+    const url = new URL(
+      API_BASE_URL
+    );
+
+    return `${url.origin}${url.pathname}`
+      .replace(/\/+$/, "");
+
+  } catch {
+    return "URL_INVALIDA";
+  }
+}
+
+/* =========================================================
+   ASSINATURA PAGAR
+========================================================= */
 
 function createPagarSignature({
   timestamp,
@@ -61,18 +129,30 @@ function createPagarSignature({
   ].join("\n");
 
   return crypto
-    .createHmac("sha256", SIGNING_SECRET)
+    .createHmac(
+      "sha256",
+      SIGNING_SECRET
+    )
     .update(canonical)
     .digest("hex");
 }
 
-async function pagarPost(path, body, idempotencyKey) {
+/* =========================================================
+   POST PAGAR
+========================================================= */
+
+async function pagarPost(
+  path,
+  body,
+  idempotencyKey
+) {
   if (!API_KEY) {
     const error = new Error(
       "PAGAR_API_KEY não configurada."
     );
 
-    error.code = "MISSING_API_KEY";
+    error.code =
+      "MISSING_API_KEY";
 
     throw error;
   }
@@ -82,33 +162,27 @@ async function pagarPost(path, body, idempotencyKey) {
       "PAGAR_SIGNING_SECRET não configurada."
     );
 
-    error.code = "MISSING_SIGNING_SECRET";
+    error.code =
+      "MISSING_SIGNING_SECRET";
 
     throw error;
   }
 
-  const baseUrl = safeBaseUrl();
+  const baseUrl =
+    safeBaseUrl();
 
-  if (baseUrl === "URL_INVALIDA") {
+  if (
+    baseUrl === "URL_INVALIDA"
+  ) {
     const error = new Error(
       "PAGAR_API_BASE_URL inválida."
     );
 
-    error.code = "INVALID_BASE_URL";
+    error.code =
+      "INVALID_BASE_URL";
 
     throw error;
   }
-
-  // IMPORTANTE:
-  // Construímos explicitamente a URL.
-  //
-  // Exemplo:
-  // https://api.pagar.co.mz/api/v1
-  // +
-  // /payments
-  //
-  // =
-  // https://api.pagar.co.mz/api/v1/payments
 
   const urlString =
     `${baseUrl}${path}`;
@@ -116,42 +190,48 @@ async function pagarPost(path, body, idempotencyKey) {
   let url;
 
   try {
-    url = new URL(urlString);
+    url = new URL(
+      urlString
+    );
   } catch {
     const error = new Error(
       "URL final da Pagar inválida."
     );
 
-    error.code = "INVALID_PAGAR_URL";
+    error.code =
+      "INVALID_PAGAR_URL";
 
     throw error;
   }
 
-  const timestamp = Date.now().toString();
+  const timestamp =
+    Date.now().toString();
 
-  const nonce = crypto
-    .randomBytes(18)
-    .toString("base64url");
+  const nonce =
+    crypto
+      .randomBytes(18)
+      .toString("base64url");
 
-  const rawBody = JSON.stringify(body);
+  const rawBody =
+    JSON.stringify(body);
 
-  const bodyHash = crypto
-    .createHash("sha256")
-    .update(rawBody)
-    .digest("hex");
+  const bodyHash =
+    crypto
+      .createHash("sha256")
+      .update(rawBody)
+      .digest("hex");
 
-  // Deve ser o pathname completo:
-  // /api/v1/payments
+  const canonicalPath =
+    url.pathname;
 
-  const canonicalPath = url.pathname;
-
-  const signature = createPagarSignature({
-    timestamp,
-    nonce,
-    method: "POST",
-    canonicalPath,
-    bodyHash,
-  });
+  const signature =
+    createPagarSignature({
+      timestamp,
+      nonce,
+      method: "POST",
+      canonicalPath,
+      bodyHash,
+    });
 
   const environment =
     API_KEY.startsWith("sk_test_")
@@ -170,36 +250,38 @@ async function pagarPost(path, body, idempotencyKey) {
     }
   );
 
-  const response = await fetch(
-    url.toString(),
-    {
-      method: "POST",
+  const response =
+    await fetch(
+      url.toString(),
+      {
+        method: "POST",
 
-      headers: {
-        Authorization:
-          `Bearer ${API_KEY}`,
+        headers: {
+          Authorization:
+            `Bearer ${API_KEY}`,
 
-        "Content-Type":
-          "application/json",
+          "Content-Type":
+            "application/json",
 
-        "Idempotency-Key":
-          idempotencyKey,
+          "Idempotency-Key":
+            idempotencyKey,
 
-        "X-Pagar-Timestamp":
-          timestamp,
+          "X-Pagar-Timestamp":
+            timestamp,
 
-        "X-Pagar-Nonce":
-          nonce,
+          "X-Pagar-Nonce":
+            nonce,
 
-        "X-Pagar-Signature":
-          `v1=${signature}`,
-      },
+          "X-Pagar-Signature":
+            `v1=${signature}`,
+        },
 
-      body: rawBody,
-    }
-  );
+        body: rawBody,
+      }
+    );
 
-  const text = await response.text();
+  const text =
+    await response.text();
 
   let data = {};
 
@@ -209,23 +291,29 @@ async function pagarPost(path, body, idempotencyKey) {
       : {};
   } catch {
     data = {
-      raw: text.slice(0, 500),
+      raw:
+        text.slice(0, 500),
     };
   }
 
   const requestId =
-    response.headers.get("x-request-id") ||
-    response.headers.get("pagar-request-id") ||
+    response.headers.get(
+      "x-request-id"
+    ) ||
+    response.headers.get(
+      "pagar-request-id"
+    ) ||
     data?.requestId ||
     data?.request_id ||
     null;
 
   if (!response.ok) {
-    const error = new Error(
-      data?.message ||
-      data?.error ||
-      `Pagar HTTP ${response.status}`
-    );
+    const error =
+      new Error(
+        data?.message ||
+        data?.error ||
+        `Pagar HTTP ${response.status}`
+      );
 
     error.httpStatus =
       response.status;
@@ -260,41 +348,282 @@ async function pagarPost(path, body, idempotencyKey) {
     throw error;
   }
 
-  console.log(
-    "USDTMZ PAGAR SUCCESS:",
-    {
-      httpStatus:
-        response.status,
-
-      requestId,
-    }
-  );
-
   return {
     data,
     requestId,
   };
 }
 
+/* =========================================================
+   POST — MODO SIMULAÇÃO
+========================================================= */
+
+async function simulatePayment(
+  sql,
+  order
+) {
+  /*
+   * Esta função NÃO chama a Pagar.
+   *
+   * Também não movimenta USDT real.
+   */
+
+  const simulationReference =
+    `SIM-PAYMENT-${order.order_id}`;
+
+  /*
+   * Verifica se já existe
+   * uma transação simulada para
+   * este pedido.
+   */
+
+  const existing =
+    await sql`
+      SELECT
+        id,
+        reference,
+        status
+      FROM transactions
+      WHERE reference =
+        ${simulationReference}
+      LIMIT 1
+    `;
+
+  if (
+    existing.length > 0
+  ) {
+    return {
+      alreadySimulated: true,
+      transaction:
+        existing[0],
+    };
+  }
+
+  /*
+   * Registra somente o pagamento
+   * simulado.
+   *
+   * O saldo simulado já é tratado
+   * pelo fluxo de simulação do order.js.
+   */
+
+  const transaction =
+    await sql`
+      INSERT INTO transactions (
+        user_id,
+        type,
+        asset,
+        amount,
+        status,
+        reference,
+        blockchain_tx_hash,
+        created_at
+      )
+
+      VALUES (
+        ${order.phone},
+        'SIMULATED_PAYMENT',
+        'MZN',
+        ${Number(order.amount)},
+        'SIMULATED',
+        ${simulationReference},
+        NULL,
+        NOW()
+      )
+
+      RETURNING
+        id,
+        user_id,
+        type,
+        asset,
+        amount,
+        status,
+        reference,
+        blockchain_tx_hash,
+        created_at
+    `;
+
+  /*
+   * Atualiza o pedido.
+   */
+
+  const updated =
+    await sql`
+      UPDATE orders
+
+      SET
+        status =
+          'SIMULATED_PAID',
+
+        updated_at =
+          NOW()
+
+      WHERE order_id =
+        ${order.order_id}
+
+      RETURNING
+        id,
+        order_id,
+        amount,
+        usdt_amount,
+        rate,
+        payment,
+        status,
+        updated_at
+    `;
+
+  return {
+    alreadySimulated: false,
+
+    transaction:
+      transaction[0],
+
+    order:
+      updated[0],
+  };
+}
+
+/* =========================================================
+   HANDLER
+========================================================= */
+
 export default async function handler(
   req,
   res
 ) {
-  if (req.method !== "POST") {
+  if (
+    req.method !== "POST"
+  ) {
     return json(res, 405, {
       success: false,
-      error: "Método não permitido.",
+      error:
+        "Método não permitido.",
     });
   }
 
   try {
-    if (!process.env.DATABASE_URL) {
-      return json(res, 500, {
+    const sql =
+      getSql();
+
+    const {
+      orderId
+    } =
+      req.body || {};
+
+    if (!orderId) {
+      return json(res, 400, {
         success: false,
         error:
-          "DATABASE_URL não configurada.",
+          "orderId é obrigatório.",
       });
     }
+
+    /* =====================================================
+       BUSCAR PEDIDO
+    ===================================================== */
+
+    const rows =
+      await sql`
+        SELECT
+          id,
+          order_id,
+          name,
+          phone,
+          operation,
+          payment,
+          amount,
+          usdt_amount,
+          rate,
+          status,
+          pagar_payment_id,
+          mpesa_transaction_id,
+          emola_transaction_id
+
+        FROM orders
+
+        WHERE order_id =
+          ${String(orderId).trim()}
+
+        LIMIT 1
+      `;
+
+    if (
+      rows.length === 0
+    ) {
+      return json(res, 404, {
+        success: false,
+        error:
+          "Pedido não encontrado.",
+      });
+    }
+
+    const order =
+      rows[0];
+
+    /* =====================================================
+       MODO SIMULAÇÃO
+    ===================================================== */
+
+    if (
+      isSimulationMode()
+    ) {
+      /*
+       * NÃO chama a Pagar.
+       */
+
+      const simulated =
+        await simulatePayment(
+          sql,
+          order
+        );
+
+      return json(res, 200, {
+        success: true,
+
+        simulation: true,
+
+        message:
+          "Pagamento simulado confirmado.",
+
+        payment: {
+          id:
+            `SIM-${order.order_id}`,
+
+          status:
+            "SIMULATED_PAID",
+        },
+
+        order: {
+          orderId:
+            order.order_id,
+
+          amountMzn:
+            Number(order.amount),
+
+          usdtAmount:
+            Number(
+              order.usdt_amount
+            ),
+
+          rate:
+            Number(order.rate),
+
+          method:
+            order.payment,
+
+          status:
+            simulated.order?.status ||
+            "SIMULATED_PAID",
+        },
+
+        transaction:
+          simulated.transaction,
+      });
+    }
+
+    /* =====================================================
+       A PARTIR DAQUI É O FLUXO PAGAR
+    ===================================================== */
 
     if (!API_KEY) {
       return json(res, 500, {
@@ -312,53 +641,16 @@ export default async function handler(
       });
     }
 
-    const { orderId } =
-      req.body || {};
+    /* =====================================================
+       PAGAMENTO JÁ CRIADO
+    ===================================================== */
 
-    if (!orderId) {
-      return json(res, 400, {
-        success: false,
-        error:
-          "orderId é obrigatório.",
-      });
-    }
-
-    const rows = await sql`
-      SELECT
-        id,
-        order_id,
-        name,
-        phone,
-        operation,
-        payment,
-        amount,
-        usdt_amount,
-        rate,
-        status,
-        pagar_payment_id,
-        mpesa_transaction_id,
-        emola_transaction_id
-      FROM orders
-      WHERE order_id = ${String(orderId).trim()}
-      LIMIT 1
-    `;
-
-    if (rows.length === 0) {
-      return json(res, 404, {
-        success: false,
-        error:
-          "Pedido não encontrado.",
-      });
-    }
-
-    const order = rows[0];
-
-    // Se já existe pagamento Pagar,
-    // não criar outro.
-
-    if (order.pagar_payment_id) {
+    if (
+      order.pagar_payment_id
+    ) {
       return json(res, 200, {
         success: true,
+
         alreadyCreated: true,
 
         payment: {
@@ -377,7 +669,9 @@ export default async function handler(
             Number(order.amount),
 
           usdtAmount:
-            Number(order.usdt_amount),
+            Number(
+              order.usdt_amount
+            ),
 
           method:
             order.payment,
@@ -385,8 +679,9 @@ export default async function handler(
       });
     }
 
-    // Não iniciar pagamento
-    // para pedidos finalizados.
+    /* =====================================================
+       ESTADOS BLOQUEADOS
+    ===================================================== */
 
     if (
       order.status === "PAID" ||
@@ -400,6 +695,10 @@ export default async function handler(
           `O pedido está no estado ${order.status}.`,
       });
     }
+
+    /* =====================================================
+       VALOR
+    ===================================================== */
 
     const amountMzn =
       Number(order.amount);
@@ -420,11 +719,18 @@ export default async function handler(
       });
     }
 
-    const phone =
-      String(order.phone || "")
-        .trim();
+    /* =====================================================
+       TELEFONE
+    ===================================================== */
 
-    if (!isValidPhone(phone)) {
+    const phone =
+      String(
+        order.phone || ""
+      ).trim();
+
+    if (
+      !isValidPhone(phone)
+    ) {
       return json(res, 400, {
         success: false,
         error:
@@ -432,12 +738,20 @@ export default async function handler(
       });
     }
 
+    /* =====================================================
+       MÉTODO
+    ===================================================== */
+
     const method =
-      String(order.payment || "")
+      String(
+        order.payment || ""
+      )
         .trim()
         .toUpperCase();
 
-    if (!isValidMethod(method)) {
+    if (
+      !isValidMethod(method)
+    ) {
       return json(res, 400, {
         success: false,
         error:
@@ -445,8 +759,14 @@ export default async function handler(
       });
     }
 
+    /* =====================================================
+       CORPO PAGAR
+    ===================================================== */
+
     const reference =
-      String(order.order_id);
+      String(
+        order.order_id
+      );
 
     const body = {
       reference,
@@ -465,11 +785,12 @@ export default async function handler(
         phone,
     };
 
-    // A mesma idempotency key
-    // protege contra duplicação.
-
     const idempotencyKey =
       `payment:${reference}`;
+
+    /* =====================================================
+       CHAMAR PAGAR
+    ===================================================== */
 
     let result;
 
@@ -480,6 +801,7 @@ export default async function handler(
           body,
           idempotencyKey
         );
+
     } catch (error) {
 
       if (
@@ -505,26 +827,6 @@ export default async function handler(
       if (
         error.httpStatus === 404
       ) {
-        console.error(
-          "USDTMZ PAGAR 404:",
-          {
-            base:
-              safeBaseUrl(),
-
-            path:
-              "/api/v1/payments",
-
-            requestId:
-              error.requestId,
-
-            code:
-              error.code,
-
-            message:
-              error.message,
-          }
-        );
-
         return json(res, 502, {
           success: false,
 
@@ -608,6 +910,10 @@ export default async function handler(
       });
     }
 
+    /* =====================================================
+       RESPOSTA PAGAR
+    ===================================================== */
+
     const data =
       result.data || {};
 
@@ -624,11 +930,9 @@ export default async function handler(
       data.payment?.providerTransactionId ||
       null;
 
-    if (!pagarPaymentId) {
-      console.error(
-        "USDTMZ PAGAR: resposta sem payment ID"
-      );
-
+    if (
+      !pagarPaymentId
+    ) {
       return json(res, 502, {
         success: false,
 
@@ -641,11 +945,18 @@ export default async function handler(
       });
     }
 
+    /* =====================================================
+       GUARDAR PAGAR NO NEON
+    ===================================================== */
+
     await sql`
       UPDATE orders
+
       SET
         pagar_payment_id =
-          ${String(pagarPaymentId)},
+          ${String(
+            pagarPaymentId
+          )},
 
         mpesa_transaction_id =
           CASE
@@ -667,7 +978,8 @@ export default async function handler(
             ELSE emola_transaction_id
           END,
 
-        updated_at = NOW()
+        updated_at =
+          NOW()
 
       WHERE order_id =
         ${reference}
@@ -676,12 +988,16 @@ export default async function handler(
     return json(res, 202, {
       success: true,
 
+      simulation: false,
+
       message:
         "Pagamento iniciado. Aguarde a confirmação.",
 
       payment: {
         id:
-          String(pagarPaymentId),
+          String(
+            pagarPaymentId
+          ),
 
         status:
           data.status ||
@@ -697,7 +1013,9 @@ export default async function handler(
         amountMzn,
 
         usdtAmount:
-          Number(order.usdt_amount),
+          Number(
+            order.usdt_amount
+          ),
 
         method,
       },
@@ -713,16 +1031,16 @@ export default async function handler(
       "USDTMZ PAYMENT INTERNAL ERROR:",
       {
         code:
-          error.code,
+          error?.code,
 
         message:
-          error.message,
+          error?.message,
 
         httpStatus:
-          error.httpStatus,
+          error?.httpStatus,
 
         requestId:
-          error.requestId,
+          error?.requestId,
       }
     );
 
